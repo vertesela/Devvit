@@ -1,12 +1,20 @@
 import {
   Devvit,
   MenuItemOnPressEvent,
+  ModMailTrigger,
+  ModMailConversationState,
+  RedditAPIClient,
   User,
+  Subreddit,
+  ModMailActionType,
+  PrivateMessage,
 } from '@devvit/public-api';
+
 
 Devvit.configure({
   kvStore: true,
-  redditAPI: true
+  redditAPI: true,
+  redis: true
 });
 
 /**
@@ -39,11 +47,45 @@ async function getAuthorStrikes(author: User, context: Devvit.Context) {
   return (await kvStore.get(key)) as number || 0;
 }
 
+
+ async function getMyStrikes(event: MenuItemOnPressEvent, context: Devvit.Context) {
+  const { reddit, ui } = context;
+  const author = await getAuthor(event, context);
+  const currentUser = await reddit.getCurrentUser();
+  const subreddit = await reddit.getCurrentSubreddit();
+  const strikes = await getAuthorStrikes(currentUser, context);
+  ui.showToast(`Poruka poslana! Baci oko na dolazne poruke :)`);
+
+  if (strikes > 0) {
+    await reddit.sendPrivateMessageAsSubreddit(
+      {
+        fromSubredditName: subreddit.name,
+        to: currentUser.username,
+        subject: `Zahtjev za pristup podacima: r/${subreddit.name}`,
+        text: `Bok ${currentUser.username}, broj tvojih strikeova za teške povrede je ${strikes}.\n\nUkoliko imaš pitanja, slobodno odgovori na ovu poruku i javit ćemo se u najkraćem mogućem roku.`,
+      }
+    )
+    return;
+  }
+  else {
+    await reddit.sendPrivateMessageAsSubreddit(
+      {
+        fromSubredditName: subreddit.name,
+        to: currentUser.username,
+        subject: `Zahtjev za pristup podacima: r/${subreddit.name}`,
+        text: `Bok ${currentUser.username}, dobre vijesti - trenutno nemaš strikeova za teške povrede na r/${subreddit.name}.\n\nUkoliko imaš pitanja, slobodno odgovori na ovu poruku i javit ćemo se u najkraćem mogućem roku.`,
+      }
+    )
+    return;
+  }
+
+ };
+
 async function checkStrikes(event: MenuItemOnPressEvent, context: Devvit.Context) {
   const author = await getAuthor(event, context);
   const { ui } = context;
   const strikes = await getAuthorStrikes(author, context);
-  ui.showToast(`Author u/${author.username} strike count: ${strikes}`);
+  ui.showToast(`Broj strikeova za teške povrede kod u/${author.username}: ${strikes}.`);
 }
 
 async function setAuthorStrikes(author: User, strikes: number, context: Devvit.Context) {
@@ -54,20 +96,46 @@ async function setAuthorStrikes(author: User, strikes: number, context: Devvit.C
 
 async function removeStrike(event: MenuItemOnPressEvent, context: Devvit.Context) {
   // Get some relevant data from the post or comment
+  const { reddit, ui } = context;
   const author = await getAuthor(event, context);
+  const currentUser = await reddit.getCurrentUser();
+  const subreddit = await reddit.getCurrentSubreddit();
   let strikes = await getAuthorStrikes(author, context);
-  const { ui } = context;
+
+    const DateAndTime = new Date();
+
+    var logAlert = `Poštovani, nedavno su izvršene promjene u broju strikeova od strane moderatora.\n\n`;
+
+    logAlert += `**Datum i vrijeme:** ${DateAndTime}\n\n`;
+
+    logAlert += `**Moderator**: ${currentUser.username}\n\n`;
+
+    logAlert += `**Korisnik**: ${author.username}\n\n`;
+
+    logAlert += `**Radnja**: Uklanjanje strikea\n\n`;
+
+    logAlert += `**Trenutni broj strikeova kod korisnika**: ${strikes - 1}\n\n`;
+
+    logAlert += `*Ovo je automatska poruka.*`;
 
   if (strikes > 0) {
     await setAuthorStrikes(author, --strikes, context);
-    ui.showToast(`Removed a strike from u/${author.username}. Remaining strikes: ${strikes}.`);
+    ui.showToast(`Uklonjen strike kod u/${author.username}. Trenutni broj strikeova za teške povrede: ${strikes}.`);
+    reddit.sendPrivateMessage(
+      {
+      to: 'hredditmod',
+      subject: `Promjene u broju strikeova na r/${subreddit.name}`,
+      text: logAlert,
+    }
+    );
     return;
   }
 
-  ui.showToast(`u/${author.username} does not have any strikes!`);
+  ui.showToast(`u/${author.username} nema strikeova za teške povrede!`);
+
 }
 
-async function clearStrikes(event: MenuItemOnPressEvent, context: Devvit.Context) {
+/* async function clearStrikes(event: MenuItemOnPressEvent, context: Devvit.Context) {
   // Get some relevant data from the post or comment
   const author = await getAuthor(event, context);
   const hadStrikes = await getAuthorStrikes(author, context);
@@ -75,12 +143,12 @@ async function clearStrikes(event: MenuItemOnPressEvent, context: Devvit.Context
 
   if (hadStrikes > 0) {
     await setAuthorStrikes(author!, 0, context);
-    ui.showToast(`Cleared ${hadStrikes} strike${hadStrikes !== 1 ? 's' : ''} from u/${author.username}!`);
+    ui.showToast(`Uklonjen broj strikeova za teške povrede kod u/${author.username}: ${hadStrikes}!`);
     return;
   }
 
-  ui.showToast(`u/${author.username} does not have any strikes!`);
-}
+  ui.showToast(`u/${author.username} nema strikeova za teške povrede!`);
+} */
 
 async function strike(event: MenuItemOnPressEvent, context: Devvit.Context) {
   // Use the correct term in our message based on what was acted upon
@@ -88,6 +156,10 @@ async function strike(event: MenuItemOnPressEvent, context: Devvit.Context) {
   const { reddit, ui } = context;
   const thing = await getThing(event, context);
   const author = await getAuthor(event, context);
+  
+  const currentUser = await reddit.getCurrentUser();
+  // await reddit.addModNote; // +
+
   /**
    * Remove the content
    * See: https://www.reddit.com/dev/api#POST_api_remove
@@ -99,16 +171,29 @@ async function strike(event: MenuItemOnPressEvent, context: Devvit.Context) {
 
   // Add a strike to the user and persist it to the KVStore
   let strikes = await getAuthorStrikes(author, context);
+  const now = new Date().getTime();
+
+  // const alert = `Sadržaj je uklonjen, no strike je već dodijeljen tom korisniku u zadnja 2 sata!`;
+
+  // await context.redis.set(`participation-recentcheck-${author.username}`, now.toString(), {expiration: addHours(now, 1)}); //new
+  // ui.showToast(alert);
+
+
   await setAuthorStrikes(author, ++strikes, context);
+
+
+
 
   // What we'll send the user in a private message
   let pmMessage = '';
   // Used to tell the moderator what punishment the user received
+  // let addModNote = true; //+
   let punishment = '';
   // Ban if they're on their 2nd or 3rd strike
   let ban = true;
   // We'll determine how long the ban lasts based on how many strikes they have
   let days = 0;
+
 
   // Get the current subreddit from the metadata
   const subreddit = await reddit.getCurrentSubreddit();
@@ -117,116 +202,25 @@ async function strike(event: MenuItemOnPressEvent, context: Devvit.Context) {
     case 1:
       // first strike, send a warning
       pmMessage = 
-      `**Warning for Serious Violation of Community Rules**`,
-      ``,
-      `We've been alerted to your activity on r/${subreddit.name} that is considered serious violation of [Community Rules](https://www.reddit.com/r/croatia/wiki/subreddit_rules_en/).`,
-      ``,
-      `Link to reported content: ${permalink}`,
-      ``,
-      `Before participating in r/${subreddit.name} further, make sure you read and understand these rules.`,
-      `If you’re reported for any further violations of these rules, additional actions including banning may be taken against you.`,
-      ``,
-      `**Community Rule:**`,
-      `> 6.1.2. A serious rule violation includes rules 3.3 and 4. In case of such violation of the rules, the User is given only one warning.`, 
-      `> In the case of a second violation of the rules, a temporary ban of at least 15 days is applied to the User, in this order, without future warnings: 15, 15, 30, 60 and further every 60 days.`, 
-      `> Warnings for serious rule violations expire after 9 months.`,
-      ``,
-      `r/${subreddit.name} moderators`,
-      ``,
-      `---`;
-      punishment = `sent a warning`;
+      `**Obavijest o teškoj povredi pravila**\n\nPozdrav ${author.username}, zaprimili smo prijavu povrede pravila na r/${subreddit.name}.\n\nNakon zaprimanja prijave, ustanovili smo da tvoj sadržaj krši [site-wide pravilo 1](https://support.reddithelp.com/hc/en-us/articles/360043071072), isti smo uklonili i šaljemo ti **upozorenje**.\n\nLink na uklonjen sadržaj: https://reddit.com${permalink}\n\nPreporučamo da prilikom budućeg sudjelovanja detaljno proučiš pravila.\n\n**Podsjetnik na pravilo 4.2.2.**\n > Teška povreda pravila obuhvaća site-wide pravila 1 i 3. U slučaju **prve ovakve povrede** pravila, Korisniku se izdaje upozorenje (automatskom porukom o uklanjanju sadržaja). U slučaju druge teške povrede, Korisnik će biti baniran na 15 dana. Svaka **daljnja teška povreda** rezultira **banom na 30 dana**.\n\nAko smatraš da je ovo greška, možeš podnijeti reklamaciju u roku od 7 dana. Reklamacije zaprimljene van roka neće se razmatrati.\n*Reklamacije neprimjerenog sadržaja prosljeđujemo Reddit administraciji.*\n\nVijeće moderatora r/${subreddit.name}\n\n`;
+      punishment = `poslano je upozorenje`;
       ban = false;
+      // addModNote = true;
       break;
 
     case 2:
-      // second strike, temp ban, warn again
       days = 15;
       pmMessage = 
-      `**Rule Violation: Temporarily Banned for Serious Violation of Community Rules**`,
-      ``,
-      `You've been temporarily banned from participating in r/${subreddit.name}.`,
-      ``,
-      `Link to reported content: ${permalink}`,
-      ``,
-      `Before participating in r/${subreddit.name} further, make sure you read and understand [Community Rules](https://www.reddit.com/r/croatia/wiki/subreddit_rules_en/).`,
-      ``,
-      `**Community Rule:**`,
-      `> 6.1.2. A serious rule violation includes rules 3.3 and 4. In case of such violation of the rules, the User is given only one warning.`, 
-      `> In the case of a second violation of the rules, a temporary ban of at least 15 days is applied to the User, in this order, without future warnings: 15, 15, 30, 60 and further every 60 days.`, 
-      `> Warnings for serious rule violations expire after 9 months.`,
-      ``,
-      `r/${subreddit.name} moderators`,
-      ``,
-      `---`;
-
-      punishment = `banned for 15 days`;
+      `**Obavijest o teškoj povredi pravila**\n\nPozdrav ${author.username}, zaprimili smo prijavu povrede pravila r/${subreddit.name}.\n\nNakon zaprimanja prijave, ustanovili smo da tvoj sadržaj krši [site-wide pravilo 1](https://support.reddithelp.com/hc/en-us/articles/360043071072) i isti smo uklonili. Budući da već imaš upozorenje o teškoj povredi pravila, ovaj put se dodjeljuje **ban na 15 dana**.\n\nLink na uklonjen sadržaj: https://reddit.com${permalink}\n\nPreporučamo da prilikom budućeg sudjelovanja detaljno proučiš pravila.\n\n**Podsjetnik na pravilo 4.2.2.**\n > Teška povreda pravila obuhvaća site-wide pravila 1 i 3. U slučaju **prve ovakve povrede** pravila, Korisniku se izdaje upozorenje (automatskom porukom o uklanjanju sadržaja). U slučaju druge teške povrede, Korisnik će biti baniran na 15 dana. Svaka **daljnja teška povreda** rezultira **banom na 30 dana**.\n\nAko smatraš da je ovo greška, možeš podnijeti reklamaciju u roku od 7 dana. Reklamacije zaprimljene van roka neće se razmatrati.\n\nPrije reklamacije, važno je znati da ti nije dodjeljen ban radi jednog sadržaja, već jer imaš raniju tešku povredu za koju ti je izdano upozorenje u obliku automatske poruke.\n\n*Reklamacije neprimjerenog sadržaja prosljeđujemo Reddit administraciji.*\n\nVijeće moderatora r/${subreddit.name}\n\n`;
+      punishment = `baniran/a je na 15 dana`;
       break;
 
-    case 3:
-    days = 15;
-    pmMessage = 
-      `**Rule Violation: Temporarily Banned for Serious Violation of Community Rules**`,
-      ``,
-      `You've been temporarily banned from participating in r/${subreddit.name}.`,
-      ``,
-      `Link to reported content: ${permalink}`,
-      ``,
-      `Before participating in r/${subreddit.name} further, make sure you read and understand [Community Rules](https://www.reddit.com/r/croatia/wiki/subreddit_rules_en/).`,
-      ``,
-      `**Community Rule:**`,
-      `> 6.1.2. A serious rule violation includes rules 3.3 and 4. In case of such violation of the rules, the User is given only one warning.`, 
-      `> In the case of a second violation of the rules, a temporary ban of at least 15 days is applied to the User, in this order, without future warnings: 15, 15, 30, 60 and further every 60 days.`, 
-      `> Warnings for serious rule violations expire after 9 months.`,
-      ``,
-      `r/${subreddit.name} moderators`,
-      ``,
-      `---`;
-     punishment = `banned for 15 days`;
-     break;
-
-    case 4:
+      default:
+      // third strike, temp ban, warn again
       days = 30;
-      pmMessage =
-      `**Rule Violation: Temporarily Banned for Serious Violation of Community Rules**`,
-      ``,
-      `You've been temporarily banned from participating in r/${subreddit.name}.`,
-      ``,
-      `Link to reported content: ${permalink}`,
-      ``,
-      `Before participating in r/${subreddit.name} further, make sure you read and understand [Community Rules](https://www.reddit.com/r/croatia/wiki/subreddit_rules_en/).`,
-      ``,
-      `**Community Rule:**`,
-      `> 6.1.2. A serious rule violation includes rules 3.3 and 4. In case of such violation of the rules, the User is given only one warning.`, 
-      `> In the case of a second violation of the rules, a temporary ban of at least 15 days is applied to the User, in this order, without future warnings: 15, 15, 30, 60 and further every 60 days.`, 
-      `> Warnings for serious rule violations expire after 9 months.`,
-      ``,
-      `r/${subreddit.name} moderators`,
-      ``,
-      `---`;
-      punishment = `banned for 30 days`;
-      break;
-
-    default:
-      // fifth (and any subsequent strikes), ban for 60 days from now
-      days = 60;
-      pmMessage =
-      `**Rule Violation: Temporarily Banned for Serious Violation of Community Rules**`,
-      ``,
-      `You've been temporarily banned from participating in r/${subreddit.name}.`,
-      ``,
-      `Link to reported content: ${permalink}`,
-      ``,
-      `Before participating in r/${subreddit.name} further, make sure you read and understand [Community Rules](https://www.reddit.com/r/croatia/wiki/subreddit_rules_en/).`,
-      ``,
-      `**Community Rule:**`,
-      `> 6.1.2. A serious rule violation includes rules 3.3 and 4. In case of such violation of the rules, the User is given only one warning.`, 
-      `> In the case of a second violation of the rules, a temporary ban of at least 15 days is applied to the User, in this order, without future warnings: 15, 15, 30, 60 and further every 60 days.`, 
-      `> Warnings for serious rule violations expire after 9 months.`,
-      ``,
-      `r/${subreddit.name} moderators`,
-      ``,
-      `---`;
-      punishment = `banned for 60 days`;
+      pmMessage = 
+      `**Obavijest o teškoj povredi pravila**\n\nPozdrav ${author.username}, zaprimili smo prijavu povrede pravila r/${subreddit.name}.\n\nNakon zaprimanja prijave, ustanovili smo da tvoj sadržaj krši [site-wide pravilo 1](https://support.reddithelp.com/hc/en-us/articles/360043071072) i isti smo uklonili. Budući da već imaš upozorenje o teškoj povredi pravila, ovaj put se dodjeljuje **ban na 30 dana**.\n\nLink na uklonjen sadržaj: https://reddit.com${permalink}\n\nPreporučamo da prilikom budućeg sudjelovanja detaljno proučiš pravila.\n\n**Podsjetnik na pravilo 4.2.2.**\n > Teška povreda pravila obuhvaća site-wide pravila 1 i 3. U slučaju **prve ovakve povrede** pravila, Korisniku se izdaje upozorenje (automatskom porukom o uklanjanju sadržaja). U slučaju druge teške povrede, Korisnik će biti baniran na 15 dana. Svaka **daljnja teška povreda** rezultira **banom na 30 dana**.\n\nAko smatraš da je ovo greška, možeš podnijeti reklamaciju u roku od 7 dana. Reklamacije zaprimljene van roka neće se razmatrati.\n\nPrije reklamacije, važno je znati da ti nije dodjeljen ban radi jednog sadržaja, već jer imaš raniju tešku povredu za koju ti je izdano upozorenje u obliku automatske poruke.\n\n*Reklamacije neprimjerenog sadržaja prosljeđujemo Reddit administraciji.*\n\nVijeće moderatora r/${subreddit.name}\n\n`;
+      punishment = `baniran/a je na 30 dana`;
       break;
   }
 
@@ -243,10 +237,10 @@ async function strike(event: MenuItemOnPressEvent, context: Devvit.Context) {
       to: author.username,
       subject: `Important notification about your activity on r/${subreddit.name}`,
       text: pmMessage,
-    },
-  );
 
-  const result = `u/${author.username} strikes: ${strikes} and has been ${punishment}.`;
+    },
+    );
+  const result = `Broj strikeova kod u/${author.username}: ${strikes} i ${punishment}.`;
 
   if (ban) {
     const currentUser = await reddit.getCurrentUser();
@@ -256,45 +250,186 @@ async function strike(event: MenuItemOnPressEvent, context: Devvit.Context) {
         username: author.username,
         duration: days,
         context: thing!.id,
-        reason: `Received ${strikes} strike${strikes !== 1 ? 's' : ''
-          } for breaking Community Rules`,
-        note: `Strike added by ${currentUser.username}`,
+        reason: `Broj strikeova za tešku povredu: ${strikes}.`,
+        note: `Strike dodan od ${currentUser.username}`,
       }
     );
   }
+  const DateAndTime = new Date();
+  var logAlert = `Poštovani, nedavno su izvršene promjene u broju strikeova od strane moderatora.\n\n`;
 
-  ui.showToast(result);
+  logAlert += `**Datum i vrijeme:** ${DateAndTime}\n\n`;
+
+  logAlert += `**Moderator**: ${currentUser.username}\n\n`;
+
+  logAlert += `**Korisnik**: ${author.username}\n\n`;
+
+  logAlert += `**Radnja**: Dodavanje strikea\n\n`;
+
+  logAlert += `**Trenutni broj strikeova kod korisnika**: ${strikes} i ${punishment}\n\n`;
+
+  logAlert += `*Ovo je automatska poruka.*`;
+
+  await reddit.sendPrivateMessage(
+    {
+      to: 'hredditmod',
+      subject: `Promjene u broju strikeova na r/${subreddit.name}`,
+      text: logAlert,  
+    }
+  );
 }
+ async function silentstrike(event: MenuItemOnPressEvent, context: Devvit.Context) {
+    // Use the correct term in our message based on what was acted upon
+    const { location } = event;
+    const { reddit, ui } = context;
+    const thing = await getThing(event, context);
+    const author = await getAuthor(event, context);
+    
+    const currentUser = await reddit.getCurrentUser();
+// Add a strike to the user and persist it to the KVStore
+    let strikes = await getAuthorStrikes(author, context);
+    await setAuthorStrikes(author, ++strikes, context);
+
+    
+    // Get the current subreddit from the metadata
+    const subreddit = await reddit.getCurrentSubreddit();
+    const result = `Dodan tihi strike. Broj strikeova kod u/${author.username}: ${strikes}.`;
+  
+    /* if (addModNote) {
+      const currentUser = await reddit.getCurrentUser();
+      await reddit.addModNote(
+        {
+          subreddit: subreddit.name,
+          user: author.username,
+          note: `Strike added by ${currentUser.username}`,
+          label: 'SPAM_WARNING',
+          redditId: ''
+        }
+      );
+    } */
+    ui.showToast(result);
+
+    const DateAndTime = new Date();
+    var logAlert = `Poštovani, nedavno su izvršene promjene u broju strikeova od strane moderatora.\n\n`;
+
+    logAlert += `**Datum i vrijeme:** ${DateAndTime}\n\n`;
+
+    logAlert += `**Moderator**: ${currentUser.username}\n\n`;
+
+    logAlert += `**Korisnik**: ${author.username}\n\n`;
+
+    logAlert += `**Radnja**: Dodavanje tihog strikea\n\n`;
+
+    logAlert += `**Trenutni broj strikeova kod korisnika**: ${strikes}\n\n`;
+
+    logAlert += `*Ovo je automatska poruka.*`;
+
+  await reddit.sendPrivateMessage(
+    {
+      to: 'hredditmod',
+      subject: `Promjene u broju strikeova na r/${subreddit.name}`,
+      text: logAlert,
+    }
+   );
+  }
+
+  /* if (addModNote) {
+    const currentUser = await reddit.getCurrentUser();
+    await reddit.addModNote(
+      {
+        subreddit: subreddit.name,
+        user: author.username,
+        note: `Strike added by ${currentUser.username}`,
+        label: 'SPAM_WARNING',
+        redditId: ''
+      }
+    );
+  } */
+
 
 /**
  * Declare our custom mod-only actions and add it to Posts and Comments
  */
+
 Devvit.addMenuItem({
-  label: 'Remove content (S)',
+  label: 'Ukloni sadržaj', //Remove content
   location: ['post', 'comment'],
   forUserType: 'moderator',
   onPress: strike,
 });
 
 Devvit.addMenuItem({
-  label: `Check Strikes (S)`,
+  label: 'Dodaj tihi strike', //Silent strike (add strike, but without notification & ban), we use it for importing strikes for earlier violations
+  location: ['post', 'comment'],
+  forUserType: 'moderator',
+  onPress: silentstrike,
+})
+
+Devvit.addMenuItem({
+  label: `Provjeri broj strikeova`, // Check the number of author's strikes
   location: ['post', 'comment'],
   forUserType: 'moderator',
   onPress: checkStrikes,
 });
 
 Devvit.addMenuItem({
-  label: 'Remove Strike (S)',
+  label: 'Ukloni strike', //Remove strike from that user
   location: ['post', 'comment'],
   forUserType: 'moderator',
   onPress: removeStrike,
+  });
+
+Devvit.addMenuItem({
+  label: 'Koliko imam strikeova?', //User option, how many strikes I have, sends a message
+  location: ['post', 'comment', 'subreddit'],
+  forUserType: 'member',
+  onPress: getMyStrikes,
 });
 
-/* Devvit.addMenuItem({ // no need for this
+Devvit.addTrigger({
+  event: 'ModMail',
+  async onEvent(event, context) {
+
+    console.log(`Received modmail trigger event:\n${JSON.stringify(event)}`);
+
+    var conversationResponse = await context.reddit.modMail.getConversation({
+      conversationId: event.conversationId
+    });
+
+    if (conversationResponse.conversation == undefined)
+      return;
+
+    if (!conversationResponse.conversation.numMessages || conversationResponse.conversation.numMessages > 1)
+      return;
+
+    if (!conversationResponse.conversation.participant || !conversationResponse.conversation.participant.name)
+      return;
+    
+    // Check to see if conversation is already archived e.g. from a ban message
+    var conversationIsArchived = (conversationResponse.conversation.state == ModMailConversationState.Archived);
+
+
+    // If conversation was previously archived (e.g. a ban) archive it again.
+    if (!conversationIsArchived)
+    {
+      await context.reddit.modMail.archiveConversation(event.conversationId);
+    }
+  }
+});
+
+/*Devvit.addMenuItem({ // no need for this
   label: 'Remove All Strikes from Author',
   location: ['post', 'comment'],
   forUserType: 'moderator',
   onPress: clearStrikes,
 }); */
+
+function addHours(now: number, arg1: number): Date | undefined {
+  throw new Error('Function not implemented.');
+}
+
+/* function addMinutes(now: number, arg1: number): Date | undefined {
+  throw new Error('Function not implemented.');
+} */
 
 export default Devvit;
