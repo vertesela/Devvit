@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package devvit.plugin.gl;
+
+option go_package = "github.snooguts.net/reddit/reddit-devplatform-monorepo/go-common/generated/protos/types/devvit/plugin/gl";
+option java_package = "com.reddit.devvit.plugin.gl";
+
+enum GLMethodType {
+  ASYNC = 0;
+  CONSTRUCTOR = 1;
+  DESTRUCTOR = 2;
+  SYNC = 3;
+}
