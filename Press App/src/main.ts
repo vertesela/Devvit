@@ -86,6 +86,17 @@ const submitForm = Devvit.createForm(
           type: 'paragraph',
           required: true,
         },
+        {
+          name: `mybDist`,
+          label: `Distinguish?`,
+          type: 'boolean',
+          defaultValue: true,
+        },
+        {
+          name: `iSticky`,
+          label: `Sticky?`,
+          type: 'boolean',
+        }
       ],
       acceptLabel: 'Post',
       description: 'This is a form for submitting a post through mod press app. You can edit the post later.',
@@ -97,11 +108,138 @@ const submitForm = Devvit.createForm(
       const appAccount = await reddit.getAppUser();
       const currentUser = await reddit.getCurrentUser();
 
+      const distinguishPost = _event.values.mybDist;
+      const stickyPost = _event.values.iSticky;
+
       const postTitle = _event.values.titleOB;
       var postBody = _event.values.bodyP;
 
+      if (!postTitle) {
+        console.log(`Post doesn't have title, returning...`);
+        return ui.showToast("Sorry, no title.");
+      }
+      else {
+        const newPost = await context.reddit.submitPost({subredditName: subreddit.name, title: postTitle, text: postBody});
+        if (distinguishPost == true){
+          newPost.distinguish();
+          console.log(`Post ${newPost.id} distinguished!`);
+        };
+        if (stickyPost == true){
+          newPost.sticky();
+          console.log(`Post ${newPost.id} stickied!`);
+        }
+        console.log(`Posted ${newPost.id}!`);
+        ui.showToast("Posted!");
+
+        await context.reddit.addModNote({
+          subreddit: subreddit.name,
+          user: appAccount.username,
+          label: 'SOLID_CONTRIBUTOR',
+          redditId: newPost.id,
+          note: `${currentUser.username} created a mod post (title: ${postTitle}).`,
+        });
+        console.log(`Added mod note for post ${newPost.id} by ${currentUser.username}.`);
+
+        const sendtoModmail = await context?.settings.get('sendModmail') as boolean;
+        const sendtoDiscord = await context?.settings.get('sendDiscord') as boolean;
+
+        var logMsg = `**Title**: ${newPost.title}\n\n`;
+        logMsg += `**URL**: https://reddit.com${newPost.permalink}\n\n`,
+        logMsg += `**Moderator**: ${currentUser.username}\n\n`;
+        logMsg += `**Post body**: ${newPost.body}\n\n`;
     
-      ui.showToast("Posted!");
+    if (sendtoModmail == false) {
+      console.log("Not sending to Modmail, skipping...");
+    } else {
+    await context.reddit.sendPrivateMessageAsSubreddit({
+      fromSubredditName: subreddit.name,
+      to: appAccount.username,
+      subject: `Mod post submitted`,
+      text: logMsg
+    });
+    console.log(`Sent to Modmail!`);
+      };
+      const webhook = await context?.settings.get('webhookEditor') as string;
+
+    if (!webhook) {
+      console.error('No webhook URL provided');
+      return;
+    }
+    else {
+    try {
+
+      let payload;
+
+      if (sendtoDiscord == false) {
+        console.log("Not sending to Discord, skipping...");
+      } else {
+
+      const discordRole = await context.settings.get('discordRole');
+
+        let discordAlertMessage;
+        if (discordRole) {
+            discordAlertMessage = `<@&${discordRole}>\n\n`;
+        } else {
+          discordAlertMessage = ``;
+        };
+      
+        if (webhook.startsWith('https://discord.com/api/webhooks/')) {
+          console.log("Got Discord webhook, let's go!");
+
+   
+         // Check if the webhook is a Discord webhook
+         payload = {
+          content: discordAlertMessage,
+          embeds: [
+{
+  title: `${newPost.title}`,
+  url: `https://reddit.com${newPost.permalink}`,
+  fields: [
+    {
+      name: 'Subreddit',
+      value: `r/${subreddit.name}`,
+      inline: true,
+    },
+    {
+      name: 'Moderator',
+      value: `${currentUser.username}`,
+      inline: true,
+    },
+    {
+      name: 'Post body',
+      value: `${newPost.body}`,
+      inline: true,
+    },
+  ],
+},
+],
+}
+        }
+}
+
+  try {
+    // Send alert to Discord
+    await fetch(webhook, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    console.log("Alert sent to Discord!");
+  }
+  catch (err) {
+    console.error(`Error sending alert: ${err}`);
+  }
+}
+    catch (err) {
+      console.error(`Error sending alert: ${err}`);
+    }
+}
+
+
+    };
+
 
   });
   
@@ -206,6 +344,7 @@ const editForm = Devvit.createForm(
 
     const reasonRev = event.values.reasonRevision;
     getPost.edit({text: newPostBody});
+    console.log(`Post ${getPost.id} edited.`);
     context.ui.showToast('Edited!');
 
     await context.reddit.addModNote({
@@ -215,6 +354,7 @@ const editForm = Devvit.createForm(
       note: `${modEditor} edited mod post, reason: ${reasonRev}`,
       redditId: originalPost
     });
+    console.log(`Added mod note for post ${getPost.id}, edit by ${modEditor}, reason: ${reasonRev}.`);
 
     /* await context.modLog
         .add({
@@ -226,12 +366,12 @@ const editForm = Devvit.createForm(
           console.error(`Failed to add modlog for: ${originalPost}.`, e.message)
         ); */
 
-    var logMsg = `Title: ${getPost.title}\n\n`;
-    logMsg += `URL: https://reddit.com${getPost.permalink}\n\n`,
-    logMsg += `Moderator: ${modEditor}\n\n`;
-    logMsg += `Previous post body: ${oldBody}\n\n`;
-    logMsg += `New post body: ${newPostBody}\n\n`;
-    logMsg += `Reason for revision: ${reasonRev}\n\n`;
+    var logMsg = `**Title**: ${getPost.title}\n\n`;
+    logMsg += `**URL**: https://reddit.com${getPost.permalink}\n\n`,
+    logMsg += `**Moderator**: ${modEditor}\n\n`;
+    logMsg += `**Previous post body**: ${oldBody}\n\n`;
+    logMsg += `**New post body**: ${newPostBody}\n\n`;
+    logMsg += `**Reason for revision**: ${reasonRev}\n\n`;
     
     if (sendtoModmail == false) {
       console.log("Not sending to Modmail, skipping...");
@@ -242,6 +382,7 @@ const editForm = Devvit.createForm(
       subject: `Edited mod post`,
       text: logMsg
     });
+    console.log(`Sent to Modmail.`);
   };
 
     const webhook = await context?.settings.get('webhookEditor') as string;
@@ -385,7 +526,7 @@ const editForm = Devvit.createForm(
   Devvit.addMenuItem({
     location: ['comment', 'post'],
     forUserType: 'moderator',
-    label: 'Delete bot content',
+    label: `Delete content (press-app)`,
     onPress: async (event, context) => {
       const { reddit, ui } = context;
       const { location } = event;
