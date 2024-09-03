@@ -4732,6 +4732,73 @@ Devvit.addMenuItem({
   },
 });
 
+const amasDog = Devvit.createForm(
+  {
+    title: 'AMA schedules',
+    fields: [
+      {
+        name: `userA`,
+        helpText: 'Username',
+        label: 'User',
+        type: 'string',
+        required: true,
+      },
+    ],
+    acceptLabel: 'Ok',
+  },
+  async (_event, context) => {
+    const { reddit, ui } = context;    
+    const author = _event.values.userA;
+    const subreddit = await reddit.getCurrentSubreddit();
+    const currentUser = await reddit.getCurrentUser();
+
+    const usernames = [...author].join(', ');
+
+  var logMod = `Bok,\n\n`;
+  
+  logMod += `Javljamo se jer smo prepoznali korisnike na r/${subreddit.name} koji bi mogli biti dobri za doprinos ove zajednice, a mi smo svojom internom evalucijom na temelju tvoje aktivnosti, iskusnosti i poštivanju pravila zaključili da bi mogao/la pomoći u poboljšanju kvalitete subreddita kroz ideje, prijedloge i iskustva kroz sudjelovanje u zatvorenoj zajednici.\n\n\n`;
+            
+  logMod += `Ukoliko si zainteresiran/a ili imaš kakvih pitanja, slobodno nam javi.\n\n\n`;
+  
+  logMod += `Lijep pozdrav,\n\n`;
+  
+  logMod += `~ Moderacija r/${subreddit.name}\n\n`;
+
+  const result = `Poslana poruka korisniku ${author}.`;
+
+   ui.showToast(result);
+  /**
+   * Send a private message to the user
+   * See: https://www.reddit.com/dev/api#POST_api_compose
+   *
+   * NOTE: Apps are executed as the moderator that installed this app into a
+   *       subreddit and will be used as the user that sends this message!
+   */
+
+  for (const username of usernames.split(', ')) {
+    await reddit.sendPrivateMessageAsSubreddit(
+    {
+      fromSubredditName: subreddit.name,
+      to: username,
+      subject: `AMA dogovor: r/${subreddit.name}`,
+      text: logMod,
+
+    },
+    );
+  }
+  }
+);
+
+Devvit.addMenuItem({
+  location: 'subreddit',
+  forUserType: 'moderator',
+  label: 'AMA dogovori',
+  onPress: async (_event, context) => {
+    const { ui } = context;
+    ui.showForm(amasDog);
+  },
+});
+
 const AMAser = Devvit.createForm(
   {
     title: 'AMA serijali - upit',
@@ -5191,6 +5258,78 @@ Devvit.addMenuItem({
   }
   ); */
 
+const addReason = Devvit.createForm(
+    {
+      title: 'In case your post may not be directly related to Croatia, please add a public reason for approving.',
+      fields: [
+        {
+          name: 'theReason',
+          label: 'The reason why the post should be visible on the subreddit',
+          type: 'string',
+        },
+      ],
+    },
+    async (_event, context) => {
+    const { reddit, ui } = context;
+    const subreddit = await context.reddit.getCurrentSubreddit();
+    const originalPost = context.postId!;
+    const approveReason = _event.values.theReason;
+    const postAuthor = (await context.reddit.getPostById(originalPost)).authorName;
+    const modName = await context.reddit.getCurrentUser();
+    const appUser = await context.reddit.getCurrentUser();
+
+    if (!approveReason){
+
+      return ui.showToast("You must provide a reason. Please try again!");
+  }
+  else {
+
+    var commentT = `Hello everyone!\n\n`;
+    commentT += `This post may not be directly related to Croatia, but ${postAuthor} has wrote the following reason why this post should be visible:\n\n`;
+    commentT += `> ${approveReason}\n\n`;
+    commentT += `After that, post was approved by moderators!\n\n`;
+
+   const apprComment = await context.reddit.submitComment({
+      id: originalPost, 
+      text: commentT,
+   });
+
+    apprComment.distinguish(true);
+    apprComment.lock();
+
+    ui.showToast(`Posted!`);
+
+    await context.reddit.addModNote({
+      subreddit: subreddit.name,
+      user: postAuthor,
+      label: 'SPAM_WARNING',
+      redditId: originalPost,
+      note: `Reason provided.`
+    })
+    
+  }}
+);
+
+Devvit.addMenuItem({
+  location: 'post',
+  label: 'Add reason (OP)',
+  onPress: async (_event, context) => {
+    const { ui } = context;
+
+    const subreddit = await context.reddit.getCurrentSubreddit();
+    const originalPost = context.postId!;
+    const postAuthor = (await context.reddit.getPostById(originalPost)).authorName;
+    const appUser = await context.reddit.getCurrentUser();
+
+    if (postAuthor == appUser.username) {
+    ui.showForm(addReason);
+    } else {
+      return ui.showToast("Sorry, you are not an OP!");
+    }
+
+  }
+});
+
 
 const repostF = Devvit.createForm(
     {
@@ -5206,9 +5345,10 @@ const repostF = Devvit.createForm(
     },
     async (_event, context) => {
     const { reddit, ui } = context;
-
+    const subreddit = await context.reddit.getCurrentSubreddit();
     const originalPost = context.postId!;
-
+    const postAuthor = (await context.reddit.getPostById(originalPost)).authorName;
+    const modName = await context.reddit.getCurrentUser();
 
     if (!_event.values.repostLink){
 
@@ -5223,6 +5363,14 @@ const repostF = Devvit.createForm(
     repostCom.lock();
     submitPostReply
     ui.showToast(`Removed!`);
+
+    await context.reddit.addModNote({
+      subreddit: subreddit.name,
+      user: postAuthor,
+      label: 'SPAM_WARNING',
+      redditId: originalPost,
+      note: `${modName.username} has removed repost (without URL to the original post).`
+    })
 
     await context.modLog
         .add({
@@ -5246,6 +5394,15 @@ const repostF = Devvit.createForm(
     repostCom.lock();
 
     ui.showToast(`Removed and linked!`);
+
+    await context.reddit.addModNote({
+      subreddit: subreddit.name,
+      user: postAuthor,
+      label: 'SPAM_WARNING',
+      redditId: originalPost,
+      note: `${modName.username} has removed repost (with URL to the original post).`
+    })
+
     await context.modLog
         .add({
           action: 'removelink',

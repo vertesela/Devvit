@@ -128,13 +128,7 @@ export const flagThePost = Devvit.createForm(
 
   tMessage += `**Report details**\n\n`;
 
-  tMessage += `**Content:**\n\n`;
-
-  tMessage += `> [${post.createdAt.toLocaleDateString()}](${post.permalink}):\n\n`;
-
-  tMessage += `> ${post.title}\n\n`;
-
-  tMessage += `> ${post.body}\n\n`;
+  tMessage += `Content from [${post.authorName}](${post.permalink})\n\n`;
 
   tMessage += `**Report reason**: ${_event.values.flagReason}\n\n`;
 
@@ -180,7 +174,7 @@ export const flagThePost = Devvit.createForm(
     }
     else {
   await context.reddit.report(post, {
-    reason: `${reporter?.username}: ${_event.values.flagReason} (${_event.values.flagContext})`,
+    reason: `${reporter?.username}: ${_event.values.flagReason} (context)`,
    })
    ui.showToast(`Flagged, thanks!`);
 
@@ -272,11 +266,6 @@ export const flagThePost = Devvit.createForm(
             inline: true,
           },
           {
-            name: 'Post',
-            value: `${post.body}`,
-            inline: true,
-          },
-          {
             name: 'Score',
             value: `${post.score}`,
             inline: true,
@@ -312,11 +301,6 @@ else {
     {
       name: 'Reason',
       value: `${_event.values.flagReason}`,
-      inline: true,
-    },
-    {
-      name: 'Post',
-      value: `${post.body}`,
       inline: true,
     },
     {
@@ -392,11 +376,7 @@ export const flagTheComment = Devvit.createForm(
 
   tMessage += `**Report details**\n\n`;
 
-  tMessage += `**Content:**\n\n`;
-
-  tMessage += `> [${comment.createdAt.toLocaleDateString()}](${comment.permalink}):\n\n`;
-
-  tMessage += `> ${comment.body.split("\n\n").join("\n\n> ")}\n\n`;
+  tMessage += `Content from [${comment.authorName}](${comment.permalink})\n\n`;
 
   tMessage += `**Report reason**: ${_event.values.flagReason}\n\n`;
 
@@ -442,7 +422,7 @@ export const flagTheComment = Devvit.createForm(
     }
     else {
   await context.reddit.report(comment!, {
-    reason: `${reporter?.username}: ${_event.values.flagReason} (${_event.values.flagContext})`,
+    reason: `${reporter?.username}: ${_event.values.flagReason} (context)`,
    })
    ui.showToast(`Flagged, thanks!`);
 
@@ -503,7 +483,7 @@ else {
           content: discordAlertMessage,
           embeds: [
       {
-        title: `${comment.body}`,
+        title: `${reporter?.username} has flagged something!`,
         url: `https://reddit.com${comment.permalink}`,
         fields: [
           {
@@ -532,11 +512,6 @@ else {
             inline: true,
           },
           {
-            name: 'Comment',
-            value: `${comment.body}`,
-            inline: true,
-          },
-          {
             name: 'Score',
             value: `${comment.score}`,
             inline: true,
@@ -551,7 +526,7 @@ else {
     content: discordAlertMessage,
     embeds: [
 {
-  title: `${comment.body}`,
+  title: `${reporter?.username} has flagged something!`,
   url: `https://reddit.com${comment.permalink}`,
   fields: [
     {
@@ -572,11 +547,6 @@ else {
     {
       name: 'Reason',
       value: `${_event.values.flagReason}`,
-      inline: true,
-    },
-    {
-      name: 'Comment',
-      value: `${comment.body}`,
       inline: true,
     },
     {
