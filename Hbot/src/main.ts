@@ -1,4 +1,4 @@
-import { PostFlairUpdate, StickyRequest } from '@devvit/protos';
+import { RedisAPI, StickyRequest } from '@devvit/protos';
 import {
   Devvit,
   MenuItemOnPressEvent,
@@ -26,7 +26,7 @@ import {
   FormOnSubmitEvent,
   Post,
   User,
-  TriggerEvent
+  RedisClient
 } from '@devvit/public-api';
 import { makeCache } from '@devvit/public-api/devvit/internals/cache.js';
 import { _namespaced } from '@devvit/public-api/devvit/internals/promise_cache.js';
@@ -41,7 +41,6 @@ Devvit.configure({
   redis: false,
   modLog: false,
   realtime: true,
-  http: true,
 });
 /* Devvit.addMenuItem({
   location: 'subreddit',
@@ -94,29 +93,78 @@ async function getAuthor(event: MenuItemOnPressEvent, context: Devvit.Context) {
   return await reddit.getUserById(thing.authorId!);
 }
 // redis
-/* async function getAuthorStrikes(author: User, context: Devvit.Context) {
+async function getAuthorStrikes(author: User, context: Devvit.Context) {
   const { redis } = context;
   const key = getKeyForAuthor(author);
+  console.log(`Dohvaćanje kaznenih bodova ${author.username}...`);
   return ((await redis.get(key)) || 0) as number;
-} */
+}
 
 
-async function getAuthorStrikes(author: User, context: Devvit.Context) {
+/* async function getAuthorStrikes(author: User, context: Devvit.Context) {
   const { kvStore } = context;
   const key = getKeyForAuthor(author);
   console.log(`Dohvaćanje kaznenih bodova ${author.username}...`);
   return (await kvStore.get(key)) as number || 0;
-}
+} */
 
-async function setAuthorStrikes(author: User, strikes: number, context: Devvit.Context) {
+/* async function setAuthorStrikes(author: User, strikes: number, context: Devvit.Context) {
   const { kvStore } = context;
   const key = getKeyForAuthor(author);
   await kvStore.put(key, strikes);
-}
+} */
 
 // redis 
 
-/* async function setAuthorStrikes(
+export type StrikeData = {
+  userId: string;
+  itemId: string;
+  demerits: number;
+  issuedAt: Date;
+};
+
+/**
+* @param redis Redis client
+* @param strike Object containing the strike data
+*/
+export async function storeStrike (redis: RedisClient, {userId, itemId, demerits, issuedAt}: StrikeData) {
+  await redis.zAdd("strikes", {member: `${userId}:${itemId}:${demerits.toFixed(0)}`, score: issuedAt.getTime()});
+}
+
+/**
+* @param redis Redis client
+* @param userId ID of the user whose strikes are to be fetched
+* @returns An array of StrikeData objects
+*/
+export async function getStrikes (redis: RedisClient, userId: string): Promise<StrikeData[]> {
+  const storedStrikes = (await redis.zScan("strikes", 0, `${userId}:*`, Infinity)).members;
+  const strikes: StrikeData[] = [];
+  storedStrikes.forEach(entry => {
+      const [author, itemId, demerits] = entry.member.split(":");
+
+      if (isNaN(Number(demerits))) {
+          console.warn(`Invalid demerits in strike: ${demerits}`);
+          return;
+      }
+      strikes.push({
+          userId: author,
+          itemId,
+          demerits: Number(demerits),
+          issuedAt: new Date(entry.score),
+      });
+  });
+  return strikes;
+}
+
+/**
+* @param {RedisClient} redis The Redis client.
+* @param {Date} oldestAllowed The oldest allowed creation Date of a strike, all entries created before this will be removed.
+*/
+export async function clearOldStrikes (redis: RedisClient, oldestAllowed: Date) {
+  await redis.zRemRangeByScore("strikes", -Infinity, oldestAllowed.getTime());
+}
+
+async function setAuthorStrikes(
   author: User,
   strikes: number,
   context: Devvit.Context
@@ -126,18 +174,10 @@ async function setAuthorStrikes(author: User, strikes: number, context: Devvit.C
   const currentUser = await context.reddit.getCurrentUser();
   const key = getKeyForAuthor(author);
   await redis.set(key, strikes.toString());
+  console.log(`${author.username} got ${strikes.toString()} point(s) by ${currentUser.username}.`);
   await redis.expire(key, 120);
-  await context.modLog
-          .add({
-            action: 'modmail_enrollment',
-            target: author.id,
-            details: `Point expired.`,
-          })
-          .catch((e: any) =>
-            console.error(`Failed to add modlog for: ${author.id}.`, e.message)
-          );
 
-} */
+}
 
 async function checkStrikes(event: MenuItemOnPressEvent, context: Devvit.Context) {
   const author = await getAuthor(event, context);
@@ -521,6 +561,11 @@ async function remImpersonation(event: MenuItemOnPressEvent, context: Devvit.Con
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+});};
 
   await reddit.sendPrivateMessageAsSubreddit(
     {
@@ -583,6 +628,11 @@ async function remImpersonation(event: MenuItemOnPressEvent, context: Devvit.Con
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+});};
   return ui.showToast(`User is already banned!`);
 
   };
@@ -650,6 +700,11 @@ async function remBadUsername(event: MenuItemOnPressEvent, context: Devvit.Conte
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+});};
 
   await reddit.sendPrivateMessageAsSubreddit(
     {
@@ -712,6 +767,11 @@ async function remBadUsername(event: MenuItemOnPressEvent, context: Devvit.Conte
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+});};
   return ui.showToast(`User is already banned!`);
 
   };
@@ -794,7 +854,7 @@ async function remHarassment(event: MenuItemOnPressEvent, context: Devvit.Contex
   
   logHa += `> ${contentB}\n\n`;
   
-  logHa += `Link to removed content: https://reddit.com${permalink}\n\n\n`;
+  logHa += `> https://reddit.com${permalink}\n\n\n`;
 
   logHa += `**Reason**: [Harassment](https://support.reddithelp.com/hc/en-us/articles/360043071072) | [Threatening violence](https://support.reddithelp.com/hc/en-us/articles/360043513151) | [Hate](https://support.reddithelp.com/hc/en-us/articles/360045715951)\n\n`;
     
@@ -818,6 +878,11 @@ async function remHarassment(event: MenuItemOnPressEvent, context: Devvit.Contex
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+  });};
     switch (strikes + 3) {
       
       case 1:
@@ -921,6 +986,11 @@ else {
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+});};
   const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
   console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
   return ui.showToast(alert);
@@ -959,7 +1029,7 @@ else {
 
   if (!userIsBanned) {
     const currentUser = await reddit.getCurrentUser();
-     context.reddit.addModNote(
+    await context.reddit.addModNote(
       {
         subreddit: subreddit.name,
         user: author.username,
@@ -1050,7 +1120,6 @@ async function remEvasion(event: MenuItemOnPressEvent, context: Devvit.Context) 
   let days = 0;
 
 
-
   // Get the current subreddit from the metadata
   const { permalink } = thing;
 
@@ -1081,7 +1150,11 @@ async function remEvasion(event: MenuItemOnPressEvent, context: Devvit.Context) 
     console.error("Undefined removal reason");
     return;
   }
-
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+  });};
     switch (strikes + 3) {
       
       case 1:
@@ -1185,6 +1258,11 @@ else {
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+});};
   const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
   console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
   return ui.showToast(alert);
@@ -1326,7 +1404,7 @@ async function remVM(event: MenuItemOnPressEvent, context: Devvit.Context) {
   
   logVM += `> ${contentB}\n\n`;
   
-  logVM += `Link to removed content: https://reddit.com${permalink}\n\n\n`;
+  logVM += `> https://reddit.com${permalink}\n\n\n`;
   
   logVM += `**Reason**: [Vote manipulation](https://support.reddithelp.com/hc/en-us/articles/360043066412)\n\n`;
   
@@ -1351,6 +1429,11 @@ async function remVM(event: MenuItemOnPressEvent, context: Devvit.Context) {
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+  });};
     switch (strikes + 3) {
       
       case 1:
@@ -1454,6 +1537,11 @@ else {
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+});};
   const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
   console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
   return ui.showToast(alert);
@@ -1599,7 +1687,7 @@ async function remSpam(event: MenuItemOnPressEvent, context: Devvit.Context) {
   
   logS += `> ${contentB}\n\n`;
   
-  logS += `Link to removed content: https://reddit.com${permalink}\n\n\n`;
+  logS += `> https://reddit.com${permalink}\n\n\n`;
 
   logS += `**Reason**: [Spam](https://support.reddithelp.com/hc/en-us/articles/360043504051)\n\n`;
     
@@ -1624,6 +1712,11 @@ async function remSpam(event: MenuItemOnPressEvent, context: Devvit.Context) {
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+  });};
     switch (strikes + 3) {
       
       case 1:
@@ -1727,6 +1820,11 @@ else {
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+});};
   const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
   console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
   return ui.showToast(alert);
@@ -1873,7 +1971,7 @@ async function remDoxxing(event: MenuItemOnPressEvent, context: Devvit.Context) 
   
   logDo += `> ${contentB}\n\n`;
   
-  logDo += `Link to removed content: https://reddit.com${permalink}\n\n\n`;
+  logDo += `> https://reddit.com${permalink}\n\n\n`;
 
   logDo += `**Reason**: [Personal and confidental information](https://support.reddithelp.com/hc/en-us/articles/360043066452)\n\n`;
     
@@ -1897,6 +1995,11 @@ async function remDoxxing(event: MenuItemOnPressEvent, context: Devvit.Context) 
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+  });};
     switch (strikes + 3) {
       
       case 1:
@@ -2000,6 +2103,11 @@ else {
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+});};
   const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
   console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
   return ui.showToast(alert);
@@ -2156,7 +2264,7 @@ async function remIllegal(event: MenuItemOnPressEvent, context: Devvit.Context) 
   
   logIll += `> ${contentB}\n\n`;
   
-  logIll += `Link to removed content: https://reddit.com${permalink}\n\n\n`;
+  logIll += `> https://reddit.com${permalink}\n\n\n`;
 
   logIll += `**Reason**: [Illegal or Probihited Transactions](https://support.reddithelp.com/hc/en-us/articles/360043513471)\n\n`;
     
@@ -2180,6 +2288,11 @@ async function remIllegal(event: MenuItemOnPressEvent, context: Devvit.Context) 
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+  });};
     switch (strikes + 3) {
       
       case 1:
@@ -2283,6 +2396,11 @@ else {
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+});};
   const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
   console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
   return ui.showToast(alert);
@@ -2439,7 +2557,7 @@ async function remBreaking(event: MenuItemOnPressEvent, context: Devvit.Context)
   
   logBr += `> ${contentB}\n\n`;
   
-  logBr += `Link to removed content: https://reddit.com${permalink}\n\n\n`;
+  logBr += `> https://reddit.com${permalink}\n\n\n`;
 
   logBr += `**Reason**: [Breaking the Site](https://support.reddithelp.com/hc/en-us/articles/360043512931)\n\n`;
     
@@ -2463,6 +2581,11 @@ async function remBreaking(event: MenuItemOnPressEvent, context: Devvit.Context)
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+  });};
     switch (strikes + 3) {
       
       case 1:
@@ -2566,6 +2689,11 @@ else {
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+});};
   const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
   console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
   return ui.showToast(alert);
@@ -2714,7 +2842,7 @@ async function remEtiquette(event: MenuItemOnPressEvent, context: Devvit.Context
   
   logEtt += `> ${contentB}\n\n`;
   
-  logEtt += `Link to removed content: https://reddit.com${permalink}\n\n\n`;
+  logEtt += `> https://reddit.com${permalink}\n\n\n`;
 
   logEtt += `**Reason**:\n\n`;
   
@@ -2739,10 +2867,6 @@ async function remEtiquette(event: MenuItemOnPressEvent, context: Devvit.Context
     await thing!.lock();
 
     await setAuthorStrikes(author, ++strikes, context);
-  if (!RemRev) {
-    console.error("Undefined removal reason");
-    return;
-  }
     switch (strikes) {
       
       case 1:
@@ -2842,10 +2966,6 @@ else {
   await thing!.remove();
   await thing!.lock();
 
-  if (!RemRev) {
-    console.error("Undefined removal reason");
-    return;
-  }
   const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
   console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
   return ui.showToast(alert);
@@ -3069,7 +3189,7 @@ async function remNonO(event: MenuItemOnPressEvent, context: Devvit.Context) {
   
   logNoN += `> ${contentB}\n\n`;
   
-  logNoN += `Link to removed content: https://reddit.com${permalink}\n\n\n`;
+  logNoN += `> https://reddit.com${permalink}\n\n\n`;
 
   logNoN += `**Reason**:\n\n`;
   
@@ -3096,6 +3216,11 @@ async function remNonO(event: MenuItemOnPressEvent, context: Devvit.Context) {
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+  });};
     switch (strikes) {
       
       case 1:
@@ -3199,6 +3324,11 @@ else {
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+});};
   const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
   console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
   return ui.showToast(alert);
@@ -3357,7 +3487,7 @@ async function remKmecanje(event: MenuItemOnPressEvent, context: Devvit.Context)
   
   logKM += `> ${contentB}\n\n`;
   
-  logKM += `Link to removed content: https://reddit.com${permalink}\n\n\n`;
+  logKM += `> https://reddit.com${permalink}\n\n\n`;
 
   logKM += `**Reason**:\n\n`;
   
@@ -3383,6 +3513,11 @@ async function remKmecanje(event: MenuItemOnPressEvent, context: Devvit.Context)
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+  });};
     switch (strikes) {
       
       case 1:
@@ -3486,6 +3621,11 @@ else {
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+});};
   const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
   console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
   return ui.showToast(alert);
@@ -3652,7 +3792,7 @@ async function remOfftopic(event: MenuItemOnPressEvent, context: Devvit.Context)
   
   logOff += `> ${contentB}\n\n`;
   
-  logOff += `Link to removed content: https://reddit.com${permalink}\n\n\n`;
+  logOff += `> https://reddit.com${permalink}\n\n\n`;
 
   logOff += `**Reason**:\n\n`;
   
@@ -3678,6 +3818,11 @@ async function remOfftopic(event: MenuItemOnPressEvent, context: Devvit.Context)
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+  });};
     switch (strikes) {
       
       case 1:
@@ -3780,6 +3925,11 @@ else {
     console.error("Undefined removal reason");
     return;
   }
+  { 
+    await thing!.addRemovalNote({
+    modNote: `Removed by ${currentUser.username}`,
+    reasonId: RemRev
+});};
   const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
   console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
   return ui.showToast(alert);
@@ -3930,204 +4080,8 @@ async function silentPointRemove(event: MenuItemOnPressEvent, context: Devvit.Co
   }
 }
 
-Devvit.addTrigger({
-  event: 'ModAction',
-  async onEvent(event, context) {
-  
-    const subreddit = await context.reddit.getCurrentSubreddit();
-
-    console.log(`Received ModAction trigger event:\n${JSON.stringify(event)}`);
-
-      if (!event.actionedAt){
-        console.error('Error');
-        return;
-      }
-      let actionedAT: Date = event!.actionedAt;
-      // Convert the date to GMT+1 timezone
-      
-      let options: Intl.DateTimeFormatOptions = {
-      timeZone: 'Europe/Paris', // GMT+1 timezone
-      hour12: false// Use 24-hour format
-      };
-
-      let createdAtGMTPlusOne: string = actionedAT.toLocaleString('en-US', options);
-
-      if (!(event.moderator?.name == ("AutoModerator")) && event.action == ("approvelink")) {
-        console.log('Found approvelink action by mod...');
-
-        const postLink = event.targetPost?.permalink;
-        const postAuthor = event.targetUser!.name;
-        const comRuleLink = await context.settings.get<string>(('pravila'));
-
-
-        var textMsg = `Hi u/${postAuthor},\n\n`;
-        textMsg += `We would like to inform you that your [post](${postLink}) has now been approved by moderators.\n\n`,
-        textMsg += `For future reference, you can find helpful information by reviewing [Community Rules](${comRuleLink}) & [FAQ](https://www.reddit.com/r/croatia/wiki/guidelines_hrv/).\n\n`;
-        textMsg += `~ r/${subreddit.name} Mod Team\n\n`;
-
-
-        await context.reddit.sendPrivateMessageAsSubreddit({
-          fromSubredditName: subreddit.name,
-          to: postAuthor,
-          subject: `Important notification: your activity on r/${subreddit.name}`,
-          text: textMsg
-        })
-        console.log(`Message sent to ${postAuthor}!`);
-
-      }
-      else {
-        console.log(`Not approval action, ignoring..`);
-      }
-    }
-  }
-  );
-
-Devvit.addTrigger({
-  event: 'ModAction',
-  async onEvent(event, context) {
-  
-    const subreddit = await context.reddit.getCurrentSubreddit();
-    const webhook = await context?.settings.get('webhook') as string;
-
-    console.log(`Received ModAction trigger event:\n${JSON.stringify(event)}`);
-
-    if (!event.moderator){
-      console.log("No moderator found in event.");
-      return;
-    }
-
-    try {
-
-      if (!event.actionedAt){
-        console.error('Error');
-        return;
-      }
-      let actionedAT: Date = event!.actionedAt;
-      // Convert the date to GMT+1 timezone
-      
-      let options: Intl.DateTimeFormatOptions = {
-      timeZone: 'Europe/Paris', // GMT+1 timezone
-      hour12: false// Use 24-hour format
-      };
-
-      let createdAtGMTPlusOne: string = actionedAT.toLocaleString('en-US', options);
-
-      if (!(event.moderator.name == ("self-ban")) && event.action == ("banuser")) {
-
-      console.log('Found banuser action by mod...')
-
-      let payload;
-
-      if (!webhook) {
-        console.error('No webhook URL provided');
-        return;
-      }
-      const discordRole = await context.settings.get('discordRole');
-
-        let discordAlertMessage;
-        if (discordRole) {
-            discordAlertMessage = `<@&${discordRole}> **Hey mods, ${event.moderator.name} has banned ${event.targetUser?.name}!**\n\n`;
-            discordAlertMessage += `You can check more details [here](https://www.reddit.com/r/${subreddit.name}/about/log?subredditName=${subreddit.name}&actions=BAN_USER).\n\n\n`;
-        } else {
-          discordAlertMessage = `**Hey mods, ${event.moderator.name} has banned ${event.targetUser?.name}!**\n\n`;
-            discordAlertMessage += `You can check more details [here](https://www.reddit.com/r/${subreddit.name}/about/log?subredditName=${subreddit.name}&actions=BAN_USER).\n\n\n`;
-        }
-      
-        if (webhook.startsWith('https://discord.com/api/webhooks/')) {
-          console.log("Got Discord webhook, let's go!");
-         // Check if the webhook is a Discord webhook
-         payload = {
-          content: discordAlertMessage,
-          embeds: [
-      {
-        fields: [
-          {
-            name: 'Subreddit',
-            value: `r/${subreddit.name}`,
-            inline: true,
-          },
-          {
-            name: 'Moderator',
-            value: `${event.moderator.name}`,
-            inline: true,
-          },
-          {
-            name: 'Target User',
-            value: `${event.targetUser?.name}`,
-            inline: true,
-          },
-          {
-            name: 'Action',
-            value: `Ban`,
-            inline: true,
-          },
-          {
-            name: 'Timestamp',
-            value: `${createdAtGMTPlusOne}`,
-            inline: true,
-          },
-        ],
-      },
-    ]
-  }
-
-  try {
-    // Send alert to Discord
-    await fetch(webhook, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-    console.log("Alert sent to Discord!");
-
-    await context.modLog
-        .add({
-          action: 'modmail_enrollment',
-          target: event.targetUser?.id,
-          details: `Alert sent to Discord`,
-        })
-        .catch((e: any) =>
-          console.error(`Failed to add modlog for: ${event.targetUser?.id}.`, e.message)
-        );
-
-  } catch (err) {
-    console.error(`Error sending alert: ${err}`);
-    await context.modLog
-        .add({
-          action: 'modmail_enrollment',
-          target: event.targetUser?.id,
-          details: `Error sending alert to Discord`,
-        })
-        .catch((e: any) =>
-          console.error(`Failed to add modlog for: ${event.targetUser?.id}.`, e.message)
-        );
-  }
-  return;
-        };
-}
-
-  else {
-    console.log("Not a ban, ignoring...");
-  }
-  
-} catch(error) {
-  console.error('Error getting mod logs:', error);
-}
-}
-});
-
-export enum SettingName{
-  LegitUsers = "legitUsers",
-};
 
 Devvit.addSettings([
-  {
-    name: SettingName.LegitUsers,
-    type: "string",
-    label: "A list of beta users",
-  },
   {
     type: 'string',
     name: 'webhook',
@@ -4293,14 +4247,14 @@ Devvit.addSettings([
 
 
 Devvit.addMenuItem({
-  label: '3. Non-obscured PI', //Remove content
+  label: '3. NonPIIII', //Remove content
   location: ['post', 'comment'],
   forUserType: 'moderator',
   description: 'Content removal due to non-obscuring private info.',
   onPress: remNonO,
 });
 
-
+/* 
 
 Devvit.addMenuItem({
   label: '4. Harassment', //Remove content
@@ -4367,6 +4321,14 @@ Devvit.addMenuItem({
 });
 
 Devvit.addMenuItem({
+  label: '7.2. Vote manipulation', //Remove content
+  location: ['post', 'comment'],
+  forUserType: 'moderator',
+  description: 'Content removal due to vote manipulation.',
+  onPress: remVM,
+}); */
+
+Devvit.addMenuItem({
   label: '1. Insult',
   location: ['post', 'comment'],
   forUserType: 'moderator',
@@ -4375,20 +4337,20 @@ Devvit.addMenuItem({
 });
 
 Devvit.addMenuItem({
-  label: '2. Mod Topic',
+  label: '2. Mod topic',
   location: ['post', 'comment'],
   forUserType: 'moderator',
   description: 'Mod topic removal.',
   onPress: remKmecanje,
 });
 
-Devvit.addMenuItem({
+/* Devvit.addMenuItem({
   label: '2.2. Offtopic',
   location: ['comment'],
   forUserType: 'moderator',
   description: 'Removal of frivolous comment from SERIOUS or Mod Thread.',
   onPress: remOfftopic,
-});
+}); */
 
 Devvit.addMenuItem({
   label: 'PP: Silent add', //Silent strike (add strike, but without notification & ban), we use it for importing strikes for earlier violations
@@ -4422,371 +4384,14 @@ Devvit.addMenuItem({
   onPress: removeStrike,
   });
 
-Devvit.addMenuItem({
+/* Devvit.addMenuItem({
   label: 'PP: Remove 3',
   location: ['post', 'comment'],
   forUserType: 'moderator',
   description: 'Use only when reversing a medium violation. The User will be notified.',
   onPress: remove3Strikes,
-});
+}); */
 
-const chatWaitList = Devvit.createForm(
-  {
-    title: 'Chat Waitlist',
-    fields: [
-      {
-        name: 'chatWT',
-        label: `Potvrđujem da ću poštivati pravila i upoznat sam s činjenicom da me Vijeće moderatora može sankcionirati ukoliko ne poštujem ista.`,
-        type: 'boolean',
-      },
-    ],
-    acceptLabel: 'Ok',
-  },
-  async (_event, context) => {
-    const { reddit, ui } = context;    
-    const subreddit = await reddit.getCurrentSubreddit();
-    const currentUser = await reddit.getCurrentUser();
-    const bannedCheck = await reddit.getBannedUsers({
-      subredditName: subreddit.name,
-      username: currentUser.username,
-    }).all();
-    const userIsBanned = bannedCheck.length > 0;
-
-    const comRuleLink = await context.settings.get<string>(('pravila'));
-
-  const genRule = await context.settings.get<string>(('generalRule'));
-
-  var logWT = `Hello ${currentUser.username},\n\n`;
-  
-  logWT += `Thank you for expressing your interest in participating in the r/croatia chat channels. We've added you to our waitlist, and you'll be among the first to gain access once we have the option for manual user approval.\n\n\n`;
-      
-  logWT += `We appreciate your patience and look forward to welcoming you to our community chat channels soon. If you have any further questions, feel free to reach out.\n\n`;
- 
-  logWT += `Cheers,\n\n`;
-  
-  logWT += `r/${subreddit.name} Mod Team\n\n`;
-
-
-  if (!_event.values.chatWT){
-    const result = `Jebiga, moraš se složit s pravilima!`;
-   ui.showToast(result);
-  }
-  else {
-    await reddit.sendPrivateMessageAsSubreddit(
-    {
-      fromSubredditName: subreddit.name,
-      to: currentUser.username,
-      subject: `Important notification: your activity on r/${subreddit.name}`,
-      text: logWT,
-
-    },
-    );
-
-  const result = `Dodan/a si na waitlistu!`;
-   ui.showToast(result);
-
-  };
-}
-);
-
-Devvit.addMenuItem({
-  location: 'subreddit',
-  label: 'Chat Waitlist',
-  onPress: async (_event, context) => {
-    const { ui } = context;
-    ui.showForm(chatWaitList);
-  },
-});
-
-const chatAc = Devvit.createForm(
-  {
-    title: 'Chats',
-    fields: [
-      {
-        name: `userA`,
-        helpText: 'Username',
-        label: 'Author',
-        type: 'string',
-        required: true,
-      },
-      {
-        name: 'noteU',
-        helpText: 'Note to user',
-        label: 'Note',
-        type: 'string',
-        required: true,
-      },
-    ],
-    acceptLabel: 'Ok',
-  },
-  async (_event, context) => {
-    const { reddit, ui } = context;    
-    const author = _event.values.userA;
-    const subreddit = await reddit.getCurrentSubreddit();
-    const currentUser = await reddit.getCurrentUser();
-    const bannedCheck = await reddit.getBannedUsers({
-      subredditName: subreddit.name,
-      username: author,
-    }).all();
-    const userIsBanned = bannedCheck.length > 0;
-
-    const comRuleLink = await context.settings.get<string>(('pravila'));
-
-  const genRule = await context.settings.get<string>(('generalRule'));
-
-  var logVM = `Hello ${author},\n\n`;
-  
-  logVM += `You've received negative point(s) for violating our [Community Rules](${comRuleLink}) in chat channels.\n\n\n`;
-      
-  logVM += `**Reason**: ${_event.values.noteU}\n\n`;
-      
-  logVM += `**Understanding the Rules**\n\n\n`;
-  
-  logVM += `By registering on Reddit and joining on r/${subreddit.name}, you accepted these rules. We enforce these rules and ignorance is not an excuse. Joking does not exempt you from compliance. If unsure, review our [Community Rules](${comRuleLink}). Your responsibility ensures a respectful environment.\n\n`;
-  
-  logVM += `**Reminder:**\n\n`;
-
-  logVM += `> ${genRule}\n\n`;  
-  
-  logVM += `**Appeal Process**\n\n\n`;
-  
-  logVM += `We understand that errors can occur, and if you believe a mistake has been made in issuing your negative point, you have the right to appeal within 3 days.\n\n`;
-    
-  logVM += `**Note:** During the appeal process, we welcome open communication, but it must be conducted in a respectful and constructive manner. Any form of trolling or harassment in the appeal will lead to the rejection of the appeal, the assignment of additional negative point(s), and reporting of the behavior to Reddit. We appreciate your cooperation in upholding these standards during the appeal.\n\n`;
-  
-  logVM += `~ r/${subreddit.name} Mod Team\n\n`;
-
-  const result = `${author} is warned.`;
-   ui.showToast(result);
-  /**
-   * Send a private message to the user
-   * See: https://www.reddit.com/dev/api#POST_api_compose
-   *
-   * NOTE: Apps are executed as the moderator that installed this app into a
-   *       subreddit and will be used as the user that sends this message!
-   */
-  await reddit.sendPrivateMessageAsSubreddit(
-    {
-      fromSubredditName: subreddit.name,
-      to: author,
-      subject: `Important notification: your activity on r/${subreddit.name}`,
-      text: logVM,
-
-    },
-    );
-  }
-);
-
-Devvit.addMenuItem({
-  location: 'subreddit',
-  forUserType: 'moderator',
-  label: 'Chat',
-  onPress: async (_event, context) => {
-    const { ui } = context;
-    ui.showForm(chatAc);
-  },
-});
-
-
-const ModernCro = Devvit.createForm(
-  {
-    title: 'Pozivnica za ModernCroatia',
-    fields: [
-      {
-        name: `userA`,
-        helpText: 'Username',
-        label: 'Korisnik',
-        type: 'string',
-        required: true,
-      },
-    ],
-    acceptLabel: 'Ok',
-  },
-  async (_event, context) => {
-    const { reddit, ui } = context;    
-    const author = _event.values.userA;
-    const subreddit = await reddit.getCurrentSubreddit();
-    const currentUser = await reddit.getCurrentUser();
-    const bannedCheck = await reddit.getBannedUsers({
-      subredditName: subreddit.name,
-      username: author,
-    }).all();
-
-  var logMod = `Bok,\n\n`;
-  
-  logMod += `Javljamo se jer smo prepoznali korisnike na r/${subreddit.name} koji bi mogli biti dobri za doprinos ove zajednice, a mi smo svojom internom evalucijom na temelju tvoje aktivnosti, iskusnosti i poštivanju pravila zaključili da bi mogao/la pomoći u poboljšanju kvalitete subreddita kroz ideje, prijedloge i iskustva kroz sudjelovanje u zatvorenoj zajednici.\n\n\n`;
-            
-  logMod += `Ukoliko si zainteresiran/a ili imaš kakvih pitanja, slobodno nam javi.\n\n\n`;
-  
-  logMod += `Lijep pozdrav,\n\n`;
-  
-  logMod += `~ Moderacija r/${subreddit.name}\n\n`;
-
-  const result = `Poslana poruka korisniku ${author}.`;
-
-   ui.showToast(result);
-  /**
-   * Send a private message to the user
-   * See: https://www.reddit.com/dev/api#POST_api_compose
-   *
-   * NOTE: Apps are executed as the moderator that installed this app into a
-   *       subreddit and will be used as the user that sends this message!
-   */
-  await reddit.sendPrivateMessageAsSubreddit(
-    {
-      fromSubredditName: subreddit.name,
-      to: author,
-      subject: `Poziv za sudjelovanje u poboljšanju kvalitete r/${subreddit.name}`,
-      text: logMod,
-
-    },
-    );
-  }
-);
-
-Devvit.addMenuItem({
-  location: 'subreddit',
-  forUserType: 'moderator',
-  label: 'ModernCroatia',
-  onPress: async (_event, context) => {
-    const { ui } = context;
-    ui.showForm(ModernCro);
-  },
-});
-
-const amasDog = Devvit.createForm(
-  {
-    title: 'AMA schedules',
-    fields: [
-      {
-        name: `userA`,
-        helpText: 'Username',
-        label: 'User',
-        type: 'string',
-        required: true,
-      },
-    ],
-    acceptLabel: 'Ok',
-  },
-  async (_event, context) => {
-    const { reddit, ui } = context;    
-    const author = _event.values.userA;
-    const subreddit = await reddit.getCurrentSubreddit();
-    const currentUser = await reddit.getCurrentUser();
-
-    const usernames = [...author].join(', ');
-
-  var logMod = `Bok,\n\n`;
-  
-  logMod += `Javljamo se jer smo prepoznali korisnike na r/${subreddit.name} koji bi mogli biti dobri za doprinos ove zajednice, a mi smo svojom internom evalucijom na temelju tvoje aktivnosti, iskusnosti i poštivanju pravila zaključili da bi mogao/la pomoći u poboljšanju kvalitete subreddita kroz ideje, prijedloge i iskustva kroz sudjelovanje u zatvorenoj zajednici.\n\n\n`;
-            
-  logMod += `Ukoliko si zainteresiran/a ili imaš kakvih pitanja, slobodno nam javi.\n\n\n`;
-  
-  logMod += `Lijep pozdrav,\n\n`;
-  
-  logMod += `~ Moderacija r/${subreddit.name}\n\n`;
-
-  const result = `Poslana poruka korisniku ${author}.`;
-
-   ui.showToast(result);
-  /**
-   * Send a private message to the user
-   * See: https://www.reddit.com/dev/api#POST_api_compose
-   *
-   * NOTE: Apps are executed as the moderator that installed this app into a
-   *       subreddit and will be used as the user that sends this message!
-   */
-
-  for (const username of usernames.split(', ')) {
-    await reddit.sendPrivateMessageAsSubreddit(
-    {
-      fromSubredditName: subreddit.name,
-      to: username,
-      subject: `AMA dogovor: r/${subreddit.name}`,
-      text: logMod,
-
-    },
-    );
-  }
-  }
-);
-
-Devvit.addMenuItem({
-  location: 'subreddit',
-  forUserType: 'moderator',
-  label: 'AMA dogovori',
-  onPress: async (_event, context) => {
-    const { ui } = context;
-    ui.showForm(amasDog);
-  },
-});
-
-const AMAser = Devvit.createForm(
-  {
-    title: 'AMA serijali - upit',
-    fields: [
-      {
-        name: `userA`,
-        helpText: 'Username',
-        label: 'Korisnik',
-        type: 'string',
-        required: true,
-      },
-      {
-        name: 'nazfaks',
-        helpText: 'Naziv fakulteta',
-        label: 'Faks',
-        type: 'string',
-        required: true,
-      },
-      {
-        name: 'datvri',
-        helpText: 'Predloženo vrijeme održavanja AMA, u formatu "petak (15.12.) u 11 sati"',
-        label: 'Datum i vrijeme',
-        type: 'string',
-        required: true,
-      },
-    ],
-    acceptLabel: 'Ok',
-  },
-  async (_event, context) => {
-    const { reddit, ui } = context;    
-    const author = _event.values.userA;
-    const subreddit = await reddit.getCurrentSubreddit();
-
-  var logMod = `Bok,\n\n`;
-  
-  logMod += `Javljamo se povodom tvoje prijave za održavanje AMA.\n\n\n`;
-            
-  logMod += `U planu je da se AMA o ${_event.values.nazfaks} održi u ${_event.values.datvri}. Trajalo bi nekih 24 sata, ovisno o interesu korisnika.\n\n\n`;
-  
-  logMod += `Molimo te da povratno odgovoriš hoćeš li biti aktivan/a u tom periodu.\n\n\n`;
-
-  logMod += `Unaprijed zahvaljujemo na povratnim informacijama.\n\n`;
-  
-  logMod += `~ Moderacija r/${subreddit.name}\n\n`;
-
-  const result = `Poslana poruka korisniku ${author}.`;
-
-   ui.showToast(result);
-  /**
-   * Send a private message to the user
-   * See: https://www.reddit.com/dev/api#POST_api_compose
-   *
-   * NOTE: Apps are executed as the moderator that installed this app into a
-   *       subreddit and will be used as the user that sends this message!
-   */
-  await reddit.sendPrivateMessageAsSubreddit(
-    {
-      fromSubredditName: subreddit.name,
-      to: author,
-      subject: `Studiranje u fokusu - prijava za AMA`,
-      text: logMod,
-
-    },
-    );
-  }
-);
 
 const checkPoints = Devvit.createForm(
   {
@@ -4929,702 +4534,6 @@ const checkPoints = Devvit.createForm(
   }
 );
 
-Devvit.addMenuItem({
-  location: 'subreddit',
-  forUserType: 'moderator',
-  label: 'AMA serijali',
-  onPress: async (_event, context) => {
-    const { ui } = context;
-    ui.showForm(AMAser);
-  },
-});
-
-Devvit.addMenuItem({
-  label: 'Provjera negativnih bodova', //User option, how many strikes I have, sends a message
-  location: ['subreddit'],
-  description: 'Mogućnost provjere negativnih bodova iz moderatorske evidencije. ',
-  onPress: async (_event, context) => {
-    const { ui } = context;
-    ui.showForm(checkPoints);
-  },
- }
-);
-
-
- Devvit.addTrigger({
-  event: 'ModMail',
-  async onEvent(event, context) {
-  
-    console.log(`Received modmail trigger event:\n${JSON.stringify(event)}`);
-
-    try {
-    if (event.messageAuthor?.name.includes('orteco')) {
-      console.log(`Archiving bot message conversation with ID: ${event.conversationId}`);
-      
-      await context.reddit.modMail.archiveConversation(event.conversationId);
-      
-      console.log(`Archived bot message conversation with ID: ${event.conversationId} successfully`);
-    } else {
-      console.log('Skipped archiving: Author or subject conditions not met.');
-    }
-  } catch (error) {
-    console.error('Error archiving bot messages:', error);
-  }
-}
-}
-);
-
-
-const approvalUs = Devvit.createForm(
-  {
-    title: 'Throwaway account approval form',
-    fields: [
-      {
-        name: `origU`,
-        label: 'Original account',
-        type: 'string',
-        helpText: 'The username of the original account omitting the u/',
-        required: true,
-      },
-      {
-      name: `throwU`,
-      label: 'Throwaway account',
-      type: 'string',
-      helpText: 'The username of the throwaway account omitting the u/',
-      required: true,
-    }
-    ],
-    acceptLabel: 'Approve',
-  },
-  async (_event, context) => {
-    const { reddit, ui, redis } = context; 
-    const origAcc = await reddit.getUserByUsername(_event.values.origU);
-    const throwAcc = await reddit.getUserByUsername(_event.values.throwU);
-    const subreddit = await reddit.getCurrentSubreddit();
-    const bannedCheck = await reddit.getBannedUsers({
-      subredditName: subreddit.name,
-      username: origAcc.username,
-    }).all();
-
-    const bannedthCheck = await reddit.getBannedUsers({
-      subredditName: subreddit.name,
-      username: throwAcc.username,
-    }).all();
-    const userIsBanned = bannedCheck.length > 0;
-    const throwIsBanned = bannedthCheck.length > 0;
-
-    const minComKO = await context.settings.get<number>(('minComKOG'));
-
-    const verifiedFlair = await context.settings.get<string>(('verFlair'));
-  
-
-  var logMod = `Hello ${origAcc.username},\n\n`;
-
-  logMod += `Great news - we've approved your throwaway account u/${throwAcc.username} on r/${subreddit.name}!\n\n`;
-
-  logMod += `If this request was made in error or if you have any questions, feel free to reach out.\n\n\n`;
-      
-  logMod += `~ r/${subreddit.name} Mod Team\n\n`;
-
-  /////////////////////////////////////////////////////
-
-  var logTr = `Hello ${throwAcc.username},\n\n`; // throwaway
-  
-  logTr += `We wanted to inform you that u/${origAcc.username} has requested to use this account as a throwaway for participation on r/${subreddit.name}.\n\n\n`;
-           
-  logTr += `This throwaway account is now approved on r/${subreddit.name}\n\n`;
-
-  logTr += `If this request was made in error or if you have any questions, feel free to reach out.\n\n\n`;
-    
-  logTr += `~ r/${subreddit.name} Mod Team\n\n`;
-
-
-  ///////////////////
-
-  var logPot = `Hello ${origAcc.username},\n\n`; // decline (throwaway)
-  
-  logPot += `We wanted to inform you that your request has been declined because your throwaway account u/${throwAcc.username} is banned on r/${subreddit.name}.\n\n\n`;
-         
-  logPot += `If this request was made in error or if you have any questions, feel free to reach out.\n\n\n`;
-
-  logPot += `~ r/${subreddit.name} Mod Team\n\n`;
-
-
-  ///////////////////////////////////
-
-  var logOrg = `Hello ${origAcc.username},\n\n`; // decline (main)
-  
-  logOrg += `We wanted to inform you that your request has been declined because your account u/${origAcc.username} does not meet the requirements.\n\n\n`;
-
-  logOrg += `If this request was made in error or if you have any questions, feel free to reach out.\n\n\n`;
-
-  logOrg += `~ r/${subreddit.name} Mod Team\n\n`;
-
-
-  /**
-   * Send a private message to the user
-   * See: https://www.reddit.com/dev/api#POST_api_compose
-   *
-   * NOTE: Apps are executed as the moderator that installed this app into a
-   *       subreddit and will be used as the user that sends this message!
-   */
-
-  if (!minComKO) {
-    console.error("Undefined data");
-    return;
-  }
-
-  if (!userIsBanned && (origAcc.commentKarma > minComKO)) {
-    console.log(`Verification of the main account u/${origAcc.username} ok, meets all criteria - comment karma: ${origAcc.commentKarma} > ${minComKO}`);
-
-    if (!throwIsBanned) {
-      console.log(`Verification of the throwaway account u/${throwAcc.username} ok, meets all criteria.`);
-    await reddit.sendPrivateMessageAsSubreddit(
-      {
-        fromSubredditName: subreddit.name,
-        to: origAcc.username,
-        subject: `Important notification: your activity on r/${subreddit.name}`,
-        text: logMod,
-      },
-      );
-      console.log(`Message to main account was sent.`);
-
-    await reddit.sendPrivateMessageAsSubreddit(
-      {
-        fromSubredditName: subreddit.name,
-        to: throwAcc.username,
-        subject: `Important notification: your activity on r/${subreddit.name}`,
-        text: logTr,
-      },
-      );
-      console.log(`Message to throwaway account was sent.`);
-      const result = `Approved!`;
-      ui.showToast(result);
-
-      await reddit.setUserFlair({
-        subredditName: subreddit.name,
-        username: throwAcc.username,
-        flairTemplateId: verifiedFlair,
-      })
-    }
-
-    else {
-      await reddit.sendPrivateMessageAsSubreddit(
-        {
-          fromSubredditName: subreddit.name,
-          to: origAcc.username,
-          subject: `Important notification: your activity on r/${subreddit.name}`,
-          text: logPot,
-        },
-        );
-        console.log(`Verification of the main account u/${throwAcc.username} failed, doesn't meet all criteria.`);
-      const result = `That throwaway account does not meet the requirements!`;
-      ui.showToast(result);
-      }
-
-    }
-    else {
-      await reddit.sendPrivateMessageAsSubreddit(
-        {
-          fromSubredditName: subreddit.name,
-          to: origAcc.username,
-          subject: `Important notification: your activity on r/${subreddit.name}`,
-          text: logOrg,
-        },
-        );
-        console.log(`Verification of the main account u/${origAcc.username} failed, doesn't meet all criteria - comment karma: ${origAcc.commentKarma} > ${minComKO}`);
-        const result = `Original account does not meet the requirements.`;
-      ui.showToast(result);
-    }
-  }
-);
-
-Devvit.addMenuItem({
-  location: 'subreddit',
-  forUserType: 'moderator',
-  // forUserType: 'moderator',
-  label: 'Throwaway',
-  description: 'Throwaway account approval form',
-  onPress: async (_event, context) => {
-    const { ui } = context;
-    ui.showForm(approvalUs);
-  },
-});
-
-
-const contentDashboardP = Devvit.createForm(
-  (data) => ({
-    fields: [
-      {
-        name: `origU`,
-        label: 'Author',
-        type: 'string',
-        defaultValue: data.author,
-        disabled: true
-      },
-      {
-        name: `postLink`,
-        label: 'Link',
-        type: 'string',
-        defaultValue: `https://reddit.com${data.link}`,
-        disabled: true
-      },
-      {
-      name: `score`,
-      label: 'Score',
-      type: 'number',
-      defaultValue: data.postScore,
-      disabled: true
-    },
-    {
-      name: `numOfReports`,
-      label: 'Number of reports',
-      type: 'number',
-      defaultValue: data.reportsNum,
-      disabled: true
-    },
-    ],
-    title: 'Content Dashboard',
-  }),
-
-  async (event, context) => {}
-);
-
-Devvit.addMenuItem({
-  location: ['post'],
-  label: 'Post Dashboard',
-  description: 'More details about post',
-  onPress: async (event, context) => {
-    const { ui } = context;
-    const { location } = event;
-
-    const subreddit = await context.reddit.getCurrentSubreddit();
-    const currentUser = await context.reddit.getCurrentUser();
-
-    const originalPost = context.postId!;
-    const getPost = await context.reddit.getPostById(originalPost);
-    const author = getPost.authorName;    
-    const postLink = getPost.permalink;
-    const score = getPost.score;
-    const numOfReports = getPost.numberOfReports;
-    const webhook = await context?.settings.get('webhook') as string;
-    const sendtoDiscord = await context?.settings.get('sendDiscord') as boolean;
-
-    const checkMod = await isModerator(context.reddit, subreddit.name, currentUser.username);
-
-
-    const settings = await context.settings.getAll();
-
-    const legitUserSetting = settings[SettingName.LegitUsers] as string ?? "";
-    const legitUsers = legitUserSetting.split(",").map(user => user.trim().toLowerCase());
-
-    if (legitUsers.includes(currentUser.username.toLowerCase()) || checkMod) {
-    console.log(`${currentUser.username} is a legit user or a mod, okay.`);
-    context.ui.showForm(contentDashboardP, { currentUser: currentUser, author: author, link: postLink, postScore: score, reportsNum: numOfReports}); 
-  
-    const webhook = await context?.settings.get('webhook') as string;
-    const sendtoDiscord = await context?.settings.get('sendDiscord') as boolean;
-  
-    
-    
-     if (!webhook) {
-      console.error('No webhook URL provided');
-      return;
-    }
-    else {
-    
-        try {
-          if (sendtoDiscord == false) {
-            console.log("Not sending to Discord, skipping...");
-          } else {
-    
-          let payload;
-    
-            let discordAlertMessage;
-              discordAlertMessage = ``;
-          
-            if (webhook.startsWith('https://discord.com/api/webhooks/')) {
-              console.log("Got Discord webhook, let's go!");
-    
-             // Check if the webhook is a Discord webhook
-             payload = {
-             content: discordAlertMessage,
-             embeds: [
-          {
-            title: `${currentUser.username} has viewed the post details.`,
-            url: `https://reddit.com${getPost.permalink}`,
-            fields: [
-              {
-                name: 'Subreddit',
-                value: `r/${subreddit.name}`,
-                inline: true,
-              },
-              {
-                name: 'User',
-                value: `${currentUser.username}`,
-                inline: true,
-              },
-              {
-                name: 'Author',
-                value: `${getPost.authorName}`,
-                inline: true,
-              },
-              {
-                name: 'Score',
-                value: `${getPost.score}`,
-                inline: true,
-              },
-              {
-                name: 'Number of reports',
-                value: `${getPost.numberOfReports}`,
-                inline: true,
-              },
-            ],
-          },
-        ],
-      }
-    }
-      try {
-        // Send alert to Discord
-        await fetch(webhook, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
-        console.log("Alert sent to Discord!");
-      }
-      catch (err) {
-        console.error(`Error sending alert: ${err}`);
-      }
-    }
-        }
-        catch (err) {
-          console.error(`Error sending alert: ${err}`);
-        }
-    }
-  }
-    else {
-      console.log(`${currentUser.username} is not a legit user, nor a mod.`);
-      if (!webhook) {
-        console.error('No webhook URL provided');
-        return;
-      }
-      else {
-      
-          try {
-            if (sendtoDiscord == false) {
-              console.log("Not sending to Discord, skipping...");
-            } else {
-      
-            let payload;
-      
-              let discordAlertMessage;
-                discordAlertMessage = ``;
-            
-              if (webhook.startsWith('https://discord.com/api/webhooks/')) {
-                console.log("Got Discord webhook, let's go!");
-      
-               // Check if the webhook is a Discord webhook
-               payload = {
-               content: discordAlertMessage,
-               embeds: [
-            {
-              title: `${currentUser.username} tried to view the post details.`,
-              url: `https://reddit.com${getPost.permalink}`,
-              fields: [
-                {
-                  name: 'Subreddit',
-                  value: `r/${subreddit.name}`,
-                  inline: true,
-                },
-                {
-                  name: 'User',
-                  value: `${currentUser.username}`,
-                  inline: true,
-                },
-                {
-                  name: 'Author',
-                  value: `${getPost.authorName}`,
-                  inline: true,
-                },
-                {
-                  name: 'Score',
-                  value: `${getPost.score}`,
-                  inline: true,
-                },
-                {
-                  name: 'Number of reports',
-                  value: `${getPost.numberOfReports}`,
-                  inline: true,
-                },
-              ],
-            },
-          ],
-        }
-      }
-        try {
-          // Send alert to Discord
-          await fetch(webhook, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-          });
-          console.log("Alert sent to Discord!");
-        }
-        catch (err) {
-          console.error(`Error sending alert: ${err}`);
-        }
-      }
-          }
-          catch (err) {
-            console.error(`Error sending alert: ${err}`);
-          }
-      }
-      return ui.showToast("Sorry, you are not allowed to do that!");
-    };
-  },
-});
-
-const contentDashboardC = Devvit.createForm(
-  (data) => ({
-    fields: [
-      {
-        name: `origU`,
-        label: 'Author',
-        type: 'string',
-        defaultValue: data.author,
-        disabled: true
-      },
-      {
-        name: `comLink`,
-        label: 'Link',
-        type: 'string',
-        defaultValue: `https://reddit.com${data.link}`,
-        disabled: true
-      },
-      {
-      name: `score`,
-      label: 'Score',
-      type: 'number',
-      defaultValue: data.postScore,
-      disabled: true
-    },
-    {
-      name: `numOfReports`,
-      label: 'Number of reports',
-      type: 'number',
-      defaultValue: data.reportsNum,
-      disabled: true
-    },
-    ],
-    title: 'Content Dashboard',
-  }),
-
-  async (event, context) => {}
-);
-
-Devvit.addMenuItem({
-  location: ['comment'],
-  label: 'Comment Dashboard',
-  description: 'More details about comment',
-  onPress: async (event, context) => {
-    const { ui } = context;
-    const { location } = event;
-
-    const subreddit = await context.reddit.getCurrentSubreddit();
-    const currentUser = await context.reddit.getCurrentUser();
-
-    const originalComment = context.commentId!;
-    const getComment = await context.reddit.getCommentById(originalComment);
-    const author = getComment.authorName;    
-    const postLink = getComment.permalink;
-    const score = getComment.score;
-    const numOfReports = getComment.numReports;
-    const webhook = await context?.settings.get('webhook') as string;
-    const sendtoDiscord = await context?.settings.get('sendDiscord') as boolean;
-
-    const checkMod = await isModerator(context.reddit, subreddit.name, currentUser.username);
-
-
-    const settings = await context.settings.getAll();
-
-    const legitUserSetting = settings[SettingName.LegitUsers] as string ?? "";
-    const legitUsers = legitUserSetting.split(",").map(user => user.trim().toLowerCase());
-
-    if (legitUsers.includes(currentUser.username.toLowerCase()) || checkMod) {
-    console.log(`${currentUser.username} is a legit user or a mod, okay.`);
-    context.ui.showForm(contentDashboardP, { currentUser: currentUser, author: author, link: postLink, postScore: score, reportsNum: numOfReports}); 
-  
-    const webhook = await context?.settings.get('webhook') as string;
-    const sendtoDiscord = await context?.settings.get('sendDiscord') as boolean;
-  
-    
-    
-     if (!webhook) {
-      console.error('No webhook URL provided');
-      return;
-    }
-    else {
-    
-        try {
-          if (sendtoDiscord == false) {
-            console.log("Not sending to Discord, skipping...");
-          } else {
-    
-          let payload;
-    
-            let discordAlertMessage;
-              discordAlertMessage = ``;
-          
-            if (webhook.startsWith('https://discord.com/api/webhooks/')) {
-              console.log("Got Discord webhook, let's go!");
-    
-             // Check if the webhook is a Discord webhook
-             payload = {
-             content: discordAlertMessage,
-             embeds: [
-          {
-            title: `${currentUser.username} has viewed the comment details.`,
-            url: `https://reddit.com${getComment.permalink}`,
-            fields: [
-              {
-                name: 'Subreddit',
-                value: `r/${subreddit.name}`,
-                inline: true,
-              },
-              {
-                name: 'User',
-                value: `${currentUser.username}`,
-                inline: true,
-              },
-              {
-                name: 'Author',
-                value: `${getComment.authorName}`,
-                inline: true,
-              },
-              {
-                name: 'Score',
-                value: `${getComment.score}`,
-                inline: true,
-              },
-              {
-                name: 'Number of reports',
-                value: `${getComment.numReports}`,
-                inline: true,
-              },
-            ],
-          },
-        ],
-      }
-    }
-      try {
-        // Send alert to Discord
-        await fetch(webhook, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
-        console.log("Alert sent to Discord!");
-      }
-      catch (err) {
-        console.error(`Error sending alert: ${err}`);
-      }
-    }
-        }
-        catch (err) {
-          console.error(`Error sending alert: ${err}`);
-        }
-    }
-  }
-    else {
-      console.log(`${currentUser.username} is not a legit user, nor a mod.`);
-      if (!webhook) {
-        console.error('No webhook URL provided');
-        return;
-      }
-      else {
-      
-          try {
-            if (sendtoDiscord == false) {
-              console.log("Not sending to Discord, skipping...");
-            } else {
-      
-            let payload;
-      
-              let discordAlertMessage;
-                discordAlertMessage = ``;
-            
-              if (webhook.startsWith('https://discord.com/api/webhooks/')) {
-                console.log("Got Discord webhook, let's go!");
-      
-               // Check if the webhook is a Discord webhook
-               payload = {
-               content: discordAlertMessage,
-               embeds: [
-            {
-              title: `${currentUser.username} tried to view the comment details.`,
-              url: `https://reddit.com${getComment.permalink}`,
-              fields: [
-                {
-                  name: 'Subreddit',
-                  value: `r/${subreddit.name}`,
-                  inline: true,
-                },
-                {
-                  name: 'User',
-                  value: `${currentUser.username}`,
-                  inline: true,
-                },
-                {
-                  name: 'Author',
-                  value: `${getComment.authorName}`,
-                  inline: true,
-                },
-                {
-                  name: 'Score',
-                  value: `${getComment.score}`,
-                  inline: true,
-                },
-                {
-                  name: 'Number of reports',
-                  value: `${getComment.numReports}`,
-                  inline: true,
-                },
-              ],
-            },
-          ],
-        }
-      }
-        try {
-          // Send alert to Discord
-          await fetch(webhook, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-          });
-          console.log("Alert sent to Discord!");
-        }
-        catch (err) {
-          console.error(`Error sending alert: ${err}`);
-        }
-      }
-          }
-          catch (err) {
-            console.error(`Error sending alert: ${err}`);
-          }
-      }
-      return ui.showToast("Sorry, you are not allowed to do that!");
-    };
-  },
-});
 
 
 /* const remPointsR = Devvit.createForm(
@@ -5654,176 +4563,7 @@ Devvit.addMenuItem({
   }
   ); */
 
-const addReason = Devvit.createForm(
-    {
-      title: 'In case your post may not be directly related to Croatia, please add a public reason for approving.',
-      fields: [
-        {
-          name: 'theReason',
-          label: 'The reason why the post should be visible on the subreddit',
-          type: 'string',
-        },
-      ],
-    },
-    async (_event, context) => {
-    const { reddit, ui } = context;
-    const subreddit = await context.reddit.getCurrentSubreddit();
-    const originalPost = context.postId!;
-    const approveReason = _event.values.theReason;
-    const postAuthor = (await context.reddit.getPostById(originalPost)).authorName;
-    const modName = await context.reddit.getCurrentUser();
-    const appUser = await context.reddit.getCurrentUser();
 
-    if (!approveReason){
-
-      return ui.showToast("You must provide a reason. Please try again!");
-  }
-  else {
-
-    var commentT = `Hello everyone!\n\n`;
-    commentT += `This post may not be directly related to Croatia, but ${postAuthor} has wrote the following reason why this post should be visible:\n\n`;
-    commentT += `> ${approveReason}\n\n`;
-    commentT += `After that, post was approved by moderators!\n\n`;
-
-   const apprComment = await context.reddit.submitComment({
-      id: originalPost, 
-      text: commentT,
-   });
-
-    apprComment.distinguish(true);
-    apprComment.lock();
-
-    ui.showToast(`Posted!`);
-
-    await context.reddit.addModNote({
-      subreddit: subreddit.name,
-      user: postAuthor,
-      label: 'SPAM_WARNING',
-      redditId: originalPost,
-      note: `Reason provided.`
-    })
-    
-  }}
-);
-
-Devvit.addMenuItem({
-  location: 'post',
-  label: 'Add reason (OP)',
-  onPress: async (_event, context) => {
-    const { ui } = context;
-
-    const subreddit = await context.reddit.getCurrentSubreddit();
-    const originalPost = context.postId!;
-    const postAuthor = (await context.reddit.getPostById(originalPost)).authorName;
-    const appUser = await context.reddit.getCurrentUser();
-
-    if (postAuthor == appUser.username) {
-    ui.showForm(addReason);
-    } else {
-      return ui.showToast("Sorry, you are not an OP!");
-    }
-
-  }
-});
-
-
-const repostF = Devvit.createForm(
-    {
-      title: 'Repost',
-      fields: [
-        {
-          name: 'repostLink',
-          label: 'Link to the original post',
-          helpText: 'Optional',
-          type: 'string',
-        },
-      ],
-    },
-    async (_event, context) => {
-    const { reddit, ui } = context;
-    const subreddit = await context.reddit.getCurrentSubreddit();
-    const originalPost = context.postId!;
-    const postAuthor = (await context.reddit.getPostById(originalPost)).authorName;
-    const modName = await context.reddit.getCurrentUser();
-
-    if (!_event.values.repostLink){
-
-      context.reddit.remove(originalPost, false);
-      await (await context.reddit.getPostById(originalPost)).lock();
-
-    const repostCom = await context.reddit.submitComment({
-      id: originalPost, 
-      text: `Hello, this is a repost.\n\nPlease check recent submissions. Thank you!\n\n`});
-
-    repostCom.distinguish(true);
-    repostCom.lock();
-    submitPostReply
-    ui.showToast(`Removed!`);
-
-    await context.reddit.addModNote({
-      subreddit: subreddit.name,
-      user: postAuthor,
-      label: 'SPAM_WARNING',
-      redditId: originalPost,
-      note: `${modName.username} has removed repost (without URL to the original post).`
-    })
-
-    await context.modLog
-        .add({
-          action: 'removelink',
-          target: originalPost,
-          details: `Repost removed.`,
-        })
-        .catch((e: any) =>
-          console.error(`Failed to add modlog for: ${originalPost}.`, e.message)
-        );
-  }
-  else {
-    context.reddit.remove(originalPost, false);
-    await (await context.reddit.getPostById(originalPost)).lock();
-
-    const repostCom = await context.reddit.submitComment({
-      id: originalPost, 
-      text: `Hello, this is a repost.\n\nPlease check [this](${_event.values.repostLink}) submission. Thank you!\n\n`});
-
-    repostCom.distinguish(true);
-    repostCom.lock();
-
-    ui.showToast(`Removed and linked!`);
-
-    await context.reddit.addModNote({
-      subreddit: subreddit.name,
-      user: postAuthor,
-      label: 'SPAM_WARNING',
-      redditId: originalPost,
-      note: `${modName.username} has removed repost (with URL to the original post).`
-    })
-
-    await context.modLog
-        .add({
-          action: 'removelink',
-          target: originalPost,
-          details: `Repost removed.`,
-        })
-        .catch((e: any) =>
-          console.error(`Failed to add modlog for: ${originalPost}.`, e.message)
-        );
-    };
-
-    
-  }    
-);
-
-Devvit.addMenuItem({
-  location: 'post',
-  forUserType: 'moderator',
-  label: 'Repost',
-  onPress: async (_event, context) => {
-    const { ui } = context;
-    ui.showForm(repostF);
-
-  }
-});
 
 Devvit.addMenuItem({
 location: ['comment', 'post'],

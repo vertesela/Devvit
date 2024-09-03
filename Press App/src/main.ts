@@ -86,17 +86,6 @@ const submitForm = Devvit.createForm(
           type: 'paragraph',
           required: true,
         },
-        {
-          name: `mybDist`,
-          label: `Distinguish?`,
-          type: 'boolean',
-          defaultValue: true,
-        },
-        {
-          name: `iSticky`,
-          label: `Sticky?`,
-          type: 'boolean',
-        }
       ],
       acceptLabel: 'Post',
       description: 'This is a form for submitting a post through mod press app. You can edit the post later.',
@@ -120,127 +109,9 @@ const submitForm = Devvit.createForm(
       }
       else {
         const newPost = await context.reddit.submitPost({subredditName: subreddit.name, title: postTitle, text: postBody});
-        if (distinguishPost == true){
-          newPost.distinguish();
-          console.log(`Post ${newPost.id} distinguished!`);
-        };
-        if (stickyPost == true){
-          newPost.sticky();
-          console.log(`Post ${newPost.id} stickied!`);
-        }
         console.log(`Posted ${newPost.id}!`);
         ui.showToast("Posted!");
-
-        await context.reddit.addModNote({
-          subreddit: subreddit.name,
-          user: appAccount.username,
-          label: 'SOLID_CONTRIBUTOR',
-          redditId: newPost.id,
-          note: `${currentUser.username} created a mod post (title: ${postTitle}).`,
-        });
-        console.log(`Added mod note for post ${newPost.id} by ${currentUser.username}.`);
-
-        const sendtoModmail = await context?.settings.get('sendModmail') as boolean;
-        const sendtoDiscord = await context?.settings.get('sendDiscord') as boolean;
-
-        var logMsg = `**Title**: ${newPost.title}\n\n`;
-        logMsg += `**URL**: https://reddit.com${newPost.permalink}\n\n`,
-        logMsg += `**Moderator**: ${currentUser.username}\n\n`;
-        logMsg += `**Post body**: ${newPost.body}\n\n`;
-    
-    if (sendtoModmail == false) {
-      console.log("Not sending to Modmail, skipping...");
-    } else {
-    await context.reddit.sendPrivateMessageAsSubreddit({
-      fromSubredditName: subreddit.name,
-      to: appAccount.username,
-      subject: `Mod post submitted`,
-      text: logMsg
-    });
-    console.log(`Sent to Modmail!`);
-      };
-      const webhook = await context?.settings.get('webhookEditor') as string;
-
-    if (!webhook) {
-      console.error('No webhook URL provided');
-      return;
-    }
-    else {
-    try {
-
-      let payload;
-
-      if (sendtoDiscord == false) {
-        console.log("Not sending to Discord, skipping...");
-      } else {
-
-      const discordRole = await context.settings.get('discordRole');
-
-        let discordAlertMessage;
-        if (discordRole) {
-            discordAlertMessage = `<@&${discordRole}>\n\n`;
-        } else {
-          discordAlertMessage = ``;
-        };
-      
-        if (webhook.startsWith('https://discord.com/api/webhooks/')) {
-          console.log("Got Discord webhook, let's go!");
-
-   
-         // Check if the webhook is a Discord webhook
-         payload = {
-          content: discordAlertMessage,
-          embeds: [
-{
-  title: `${newPost.title}`,
-  url: `https://reddit.com${newPost.permalink}`,
-  fields: [
-    {
-      name: 'Subreddit',
-      value: `r/${subreddit.name}`,
-      inline: true,
-    },
-    {
-      name: 'Moderator',
-      value: `${currentUser.username}`,
-      inline: true,
-    },
-    {
-      name: 'Post body',
-      value: `${newPost.body}`,
-      inline: true,
-    },
-  ],
-},
-],
-}
-        }
-}
-
-  try {
-    // Send alert to Discord
-    await fetch(webhook, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-    console.log("Alert sent to Discord!");
-  }
-  catch (err) {
-    console.error(`Error sending alert: ${err}`);
-  }
-}
-    catch (err) {
-      console.error(`Error sending alert: ${err}`);
-    }
-}
-
-
-    };
-
-
+      }
   });
   
 Devvit.addMenuItem({
@@ -344,7 +215,6 @@ const editForm = Devvit.createForm(
 
     const reasonRev = event.values.reasonRevision;
     getPost.edit({text: newPostBody});
-    console.log(`Post ${getPost.id} edited.`);
     context.ui.showToast('Edited!');
 
     await context.reddit.addModNote({
@@ -354,7 +224,6 @@ const editForm = Devvit.createForm(
       note: `${modEditor} edited mod post, reason: ${reasonRev}`,
       redditId: originalPost
     });
-    console.log(`Added mod note for post ${getPost.id}, edit by ${modEditor}, reason: ${reasonRev}.`);
 
     /* await context.modLog
         .add({
@@ -366,12 +235,12 @@ const editForm = Devvit.createForm(
           console.error(`Failed to add modlog for: ${originalPost}.`, e.message)
         ); */
 
-    var logMsg = `**Title**: ${getPost.title}\n\n`;
-    logMsg += `**URL**: https://reddit.com${getPost.permalink}\n\n`,
-    logMsg += `**Moderator**: ${modEditor}\n\n`;
-    logMsg += `**Previous post body**: ${oldBody}\n\n`;
-    logMsg += `**New post body**: ${newPostBody}\n\n`;
-    logMsg += `**Reason for revision**: ${reasonRev}\n\n`;
+    var logMsg = `Title: ${getPost.title}\n\n`;
+    logMsg += `URL: https://reddit.com${getPost.permalink}\n\n`,
+    logMsg += `Moderator: ${modEditor}\n\n`;
+    logMsg += `Previous post body: ${oldBody}\n\n`;
+    logMsg += `New post body: ${newPostBody}\n\n`;
+    logMsg += `Reason for revision: ${reasonRev}\n\n`;
     
     if (sendtoModmail == false) {
       console.log("Not sending to Modmail, skipping...");
@@ -382,7 +251,6 @@ const editForm = Devvit.createForm(
       subject: `Edited mod post`,
       text: logMsg
     });
-    console.log(`Sent to Modmail.`);
   };
 
     const webhook = await context?.settings.get('webhookEditor') as string;
@@ -523,10 +391,316 @@ const editForm = Devvit.createForm(
     },
   });
 
+  const submitCommentReply = Devvit.createForm(
+    {
+        title: 'Submit a comment',
+        fields: [
+          {
+            name: `bodyC`,
+            label: 'Text',
+            type: 'paragraph',
+            required: true,
+          },
+        ],
+        acceptLabel: 'Publish',
+        description: 'This is a form for submitting a reply to comment through mod press app. You can edit the comment later.',
+        cancelLabel: 'Cancel',
+      },
+      async (_event, context) => {
+        const { reddit, ui } = context;    
+        const subreddit = await reddit.getCurrentSubreddit();
+        const appAccount = await reddit.getAppUser();
+        const currentUser = await reddit.getCurrentUser();
+  
+        var commentBody = _event.values.bodyC;
+
+        const originalPost = context.postId!;
+        const previousComment = context.commentId!;
+        
+       const newComment = await (await context.reddit.getPostById(originalPost)).addComment({text: commentBody});
+        
+        console.log(`Posted ${newComment.id}!`);
+        ui.showToast("Posted!");
+  
+    });
+    
+  Devvit.addMenuItem({
+      location: ['post', 'comment'],
+      label: 'Comment (press-app)',
+      description: 'A form for submitting a comment through Press app. Comments can be edited later.',
+      forUserType: 'moderator',
+      onPress: async (event, context) => {
+        const { ui } = context;
+        const { location } = event;
+  
+        const subreddit = await context.reddit.getCurrentSubreddit();
+        const appUser = await context.reddit.getCurrentUser();
+        const botAccount = (await context.reddit.getAppUser()).username;
+        const perms = await appUser.getModPermissionsForSubreddit(subreddit.name);
+    
+        if (location === 'post') {
+          if ( perms.includes('posts') || perms.includes('all') ){
+          console.log(`${appUser.username} has needed permissions (${perms}), ok!`);
+          context.ui.showForm(submitComment);
+          } else {
+              console.log(`${appUser.username} doesn't have Posts permission (${perms}), not ok!`);
+            return ui.showToast(`You don't have the necessary permissions.`);
+          }
+        };
+
+      if (location === 'comment') {
+      if ( perms.includes('posts') || perms.includes('all') ){
+      console.log(`${appUser.username} has needed permissions (${perms}), ok!`);
+      context.ui.showForm(submitCommentReply);
+      } else {
+          console.log(`${appUser.username} doesn't have Posts permission (${perms}), not ok!`);
+        return ui.showToast(`You don't have the necessary permissions.`);
+      }
+    };
+      },
+  });
+
+  Devvit.addMenuItem({
+    location: 'comment',
+    label: 'Edit comment',
+    description: 'A form for editing a comment through Press App.',
+    forUserType: 'moderator',
+    onPress: async (_event, context) => {
+      const { ui } = context;
+  
+      const subreddit = await context.reddit.getCurrentSubreddit();
+      const originalComment = context.commentId!;
+      const getComment = await context.reddit.getCommentById(originalComment);
+      const commentAuthor = getComment.authorName;
+      const appUser = await context.reddit.getCurrentUser();
+      
+      const checkDist = getComment.isDistinguished();
+      const checkSt = getComment.isStickied();
+      
+  
+  const botAccount = (await context.reddit.getAppUser()).username;
+
+  const perms = await appUser.getModPermissionsForSubreddit(subreddit.name);
+   
+  
+  if ((commentAuthor == botAccount)) {
+    console.log(`${commentAuthor} = ${botAccount}, ok!`);
+    if ( perms.includes('posts') || perms.includes('all') ){
+    console.log(`${appUser.username} has needed permissions (${perms}), ok!`);
+    context.ui.showForm(editForm, { userId: appUser, cBody: getComment.body, statusDist: checkDist, statusSticky: checkSt });
+    } else {
+        console.log(`${appUser.username} doesn't have Posts permission (${perms}), not ok!`);
+      return ui.showToast(`You don't have the necessary permissions.`);
+    }
+  }
+  else {
+    console.log(`${commentAuthor} != ${botAccount}, not ok!`);
+    return ui.showToast(`Sorry, this is not submission from ${botAccount}!`);
+  };
+    },
+  });
+
+  const editComment = Devvit.createForm(
+    (data) => ({
+      fields: [
+        {
+          name: `nBody`,
+          label: 'Comment',
+          type: 'paragraph',
+          defaultValue: data.cBody,
+          required: true,
+        },
+      {
+        name: `reasonRevision`,
+        label: 'Reason',
+        type: 'string',
+      },
+      {
+        name: `mybDist`,
+        label: `Distinguish?`,
+        type: 'boolean',
+        defaultValue: data.statusDist,
+      },
+      {
+        name: `iSticky`,
+        label: `Sticky?`,
+        type: 'boolean',
+        defaultValue: data.statusSticky,
+      }
+      ],
+      title: 'Edit comment',
+      acceptLabel: 'Submit',
+      cancelLabel: 'Cancel',
+    }),
+    async (event, context) => {
+      console.log(event.values);
+      const subreddit = await context.reddit.getCurrentSubreddit();
+      const appAccount = (await context.reddit.getAppUser()).username;
+      const modEditor = (await context.reddit.getCurrentUser()).username;
+      const originalComment = context.commentId!;
+      const getComment = await context.reddit.getCommentById(originalComment);
+      const img = event.values.imgBody;
+      const distinguishComment = event.values.mybDist;
+      const stickyComment = event.values.iSticky;
+  
+      const sendtoModmail = await context?.settings.get('sendModmail') as boolean;
+      const sendtoDiscord = await context?.settings.get('sendDiscord') as boolean;
+  
+      const oldBody = getComment.body;
+  
+      var newCommentText= event.values.nBody;
+  
+      if (distinguishComment == false){
+        console.log('Undistinguishing comment...');
+        getComment.undistinguish();
+      } else {
+        console.log('Distinguishing comment...');
+        getComment.distinguish();
+      };
+  
+      if (stickyComment == false){
+        console.log('Unstickying comment...');
+        getComment.distinguish(false);
+      } else {
+        console.log('Stickying comment...');
+        getComment.distinguish(true);
+      };
+  
+      const reasonRev = event.values.reasonRevision;
+      getComment.edit({text: newCommentText});
+      context.ui.showToast('Edited!');
+  
+      await context.reddit.addModNote({
+        subreddit: subreddit.name,
+        user: appAccount,
+        label: 'SOLID_CONTRIBUTOR',
+        note: `${modEditor} edited mod comment, reason: ${reasonRev}`,
+        redditId: originalComment
+      });
+  
+      /* await context.modLog
+          .add({
+            action: 'edit_scheduled_post',
+            target: originalPost,
+            details: `Edited mod post`,
+          })
+          .catch((e: any) =>
+            console.error(`Failed to add modlog for: ${originalPost}.`, e.message)
+          ); */
+  
+      var logMsg = `Comment URL: https://reddit.com${getComment.permalink}\n\n`;
+      logMsg += `Moderator: ${modEditor}\n\n`;
+      logMsg += `Previous version: ${oldBody}\n\n`;
+      logMsg += `New version: ${newCommentText}\n\n`;
+      logMsg += `Reason for revision: ${reasonRev}\n\n`;
+      
+      if (sendtoModmail == false) {
+        console.log("Not sending to Modmail, skipping...");
+      } else {
+      await context.reddit.sendPrivateMessageAsSubreddit({
+        fromSubredditName: subreddit.name,
+        to: appAccount,
+        subject: `Edited mod comment`,
+        text: logMsg
+      });
+    };
+  
+      const webhook = await context?.settings.get('webhookEditor') as string;
+  
+      console.log(`Received ModEdit trigger event:\n${JSON.stringify(event)}`);
+  
+      if (!webhook) {
+        console.error('No webhook URL provided');
+        return;
+      }
+      else {
+      try {
+  
+        let payload;
+  
+        if (sendtoDiscord == false) {
+          console.log("Not sending to Discord, skipping...");
+        } else {
+  
+        const discordRole = await context.settings.get('discordRole');
+  
+          let discordAlertMessage;
+          if (discordRole) {
+              discordAlertMessage = `<@&${discordRole}>\n\n`;
+          } else {
+            discordAlertMessage = ``;
+          };
+        
+          if (webhook.startsWith('https://discord.com/api/webhooks/')) {
+            console.log("Got Discord webhook, let's go!");
+  
+     
+           // Check if the webhook is a Discord webhook
+           payload = {
+            content: discordAlertMessage,
+            embeds: [
+  {
+    title: `${newCommentText}`,
+    url: `https://reddit.com${getComment.permalink}`,
+    fields: [
+      {
+        name: 'Subreddit',
+        value: `r/${subreddit.name}`,
+        inline: true,
+      },
+      {
+        name: 'Moderator',
+        value: `${modEditor}`,
+        inline: true,
+      },
+      {
+        name: 'Previous version',
+        value: `${oldBody}`,
+        inline: true,
+      },
+      {
+        name: 'Reason',
+        value: `${reasonRev}`,
+        inline: true,
+      },
+      {
+        name: 'Score',
+        value: `${getComment.score}`,
+        inline: true,
+      },
+    ],
+  },
+  ],
+  }
+          }
+  }
+  
+    try {
+      // Send alert to Discord
+      await fetch(webhook, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      console.log("Alert sent to Discord!");
+    }
+    catch (err) {
+      console.error(`Error sending alert: ${err}`);
+    }
+  }
+      catch (err) {
+        console.error(`Error sending alert: ${err}`);
+      }
+  }
+    });
+
+  
   Devvit.addMenuItem({
     location: ['comment', 'post'],
     forUserType: 'moderator',
-    label: `Delete content (press-app)`,
+    label: 'Delete bot content',
     onPress: async (event, context) => {
       const { reddit, ui } = context;
       const { location } = event;
