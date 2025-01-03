@@ -106,7 +106,14 @@ Welcome to the **Contest Vote App**! This app is designed to make your subreddit
 
 ---
 
+## Source Code and License
+
+The source code for the Contest Vote App is available on [GitHub](https://github.com/vertesela/Devvit/tree/main/Contest%20Vote%20App).
+
+This project is licensed under the [BSD-3-Clause License](https://opensource.org/license/bsd-3-clause). This app was developed in compliance with [Reddit's Developer Terms](https://redditinc.com/policies/developer-terms) and adheres to the guidelines for the Devvit platform.
+
 ## Support
+
 If you encounter any issues or have questions, please contact me [via Modmail](https://reddit.com/message/compose?to=/r/paskapps&subject=Contest%20Vote%20App%20-%20feedback&message=Text%3A%20).
 
 Thank you for using Contest Vote App! I hope it enhances your community’s contests and makes them fairer and more transparent.
