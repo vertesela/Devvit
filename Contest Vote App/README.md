@@ -30,6 +30,25 @@ Welcome to the **Contest Vote App**! This app is designed to make your subreddit
 2. Save your settings.
     - **Required Settings**: Both Account Age and Flair CSS Class must be defined for the app to function properly.
 
+#### Step 2.1: Configure User Flair and AutoMod
+
+The app automatically creates a user flair titled "Verified contest participant" and updates your AutoMod script (with user flair ID) to handle participant verification. However, due to Reddit API limitations, you need to manually assign the CSS class verified to this flair:
+
+1. Go to your subreddit’s User Flair Settings.
+2. Locate the flair titled "Verified contest participant".
+3. Edit this flair and add the CSS class 'verified'.
+4. Save your changes.
+
+##### Default AutoMod Settings
+
+When installed, the app adds the following rules to your AutoMod configuration:
+
+1. **Trigger**: When users comment !contest.
+2. **Minimum Subreddit Karma**: 50 (users must have at least 50 subreddit karma to participate).
+3. **Action**: Assign the "Verified contest participant" flair to eligible users and notify them with a confirmation message.
+
+These settings were added to simplify setup but can be customized in your AutoMod configuration. Feel free to adjust them to better fit your community's needs!
+
 ---
 
 ### Step 3: Running a Contest

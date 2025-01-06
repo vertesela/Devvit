@@ -32,6 +32,7 @@ Devvit.addSettings([
         type: "string",
         label: "User flair CSS class",
         helpText: 'User with this flair CSS class can vote.',
+        defaultValue: 'verified'
       }
     ]
 },
@@ -51,9 +52,9 @@ Devvit.addTrigger({
     
     firstMsg += `This app allows you to run fair and transparent contests by replacing anonymous upvotes with controlled votes, ensuring only eligible users can participate.\n\n`,
 
-    firstMsg += `Votes are securely stored and will be displayed on a wiki page for full transparency. Customize voting rules to fit your community's needs!\n\n`;
+    firstMsg += `Votes are securely stored and will be displayed on a wiki page for full transparency. Please take a look at README page and customize voting rules to fit your community's needs!\n\n`;
         
-    firstMsg += `[Config](https://developers.reddit.com/r/${subreddit.name}/apps/contest-vote) | [Wiki](https://reddit.com/r/${subreddit.name}/w/contest-vote/) | [Contact](https://reddit.com/message/compose?to=/r/paskapps&subject=Contest-Vote&message=Text%3A%20)\n\n\n`;
+    firstMsg += `[README](https://developers.reddit.com/apps/contest-vote/) | [Config](https://developers.reddit.com/r/${subreddit.name}/apps/contest-vote) |  [Contact](https://reddit.com/message/compose?to=/r/paskapps&subject=Contest-Vote&message=Text%3A%20)\n\n\n`;
 
     function CurrentCETDateTime(): string {
       const cetTime = new Date(Date.now() + 1 * 60 * 60000); // CET is UTC+1
@@ -175,6 +176,60 @@ Devvit.addTrigger({
       to: null,
     })
     console.log("First message sent!");
+
+    const contestUserFlair = await context.reddit.createUserFlairTemplate({
+      subredditName: subreddit.name,
+      modOnly: true,
+      text: `Verified Contest Participant`
+    });
+
+
+    const autoModWikiName = "config/automoderator";
+      let autoModPage: WikiPage | undefined;
+    try {
+        autoModPage = await context.reddit.getWikiPage(subreddit.name, autoModWikiName);
+    } catch {
+        //
+    }
+
+    var autoModPageContent = `${autoModPage?.content}\n\n`;
+    autoModPageContent += `## Contest Participation Check\n`;
+    autoModPageContent += `type: comment\n`;
+    autoModPageContent += `moderators_exempt: false\n`;
+    autoModPageContent += `body (full-text): '!contest'\n`;
+    autoModPageContent += `action: remove\n`;
+    autoModPageContent += `action_reason: Contest Participation Check\n`;
+    autoModPageContent += `author:\n`;
+    autoModPageContent += `    is_moderator: false\n`;
+    autoModPageContent += `    combined_subreddit_karma: "> 50"\n`;
+    autoModPageContent += `    set_flair:\n`;
+    autoModPageContent += `        template_id: ${contestUserFlair.id}\n`;
+    autoModPageContent += `    overwrite_flair: true\n`;
+    autoModPageContent += `message_subject: "Verified!"\n\n`;
+    autoModPageContent += `message: "Hey u/{{author}}, great news! You have been verified and you can now vote!"\n`;
+    autoModPageContent += `---\n\n`;
+
+      const autoModPageOption = {
+        subredditName: subreddit.name,
+        page: autoModWikiName,
+        content: autoModPageContent,
+        reason: `Added script for Contest Participation Check`,
+    };
+  
+
+    if (autoModWikiName) {
+        await context.reddit.updateWikiPage(autoModPageOption);
+    } else {
+        await context.reddit.createWikiPage(autoModPageOption);
+        await context.reddit.updateWikiPageSettings({
+            subredditName: subreddit.name,
+            page: autoModWikiName,
+            listed: true,
+            permLevel: WikiPagePermissionLevel.MODS_ONLY,
+        });
+    }
+    console.log("AutoMod page updated (first time).");
+
 }
 }
 ); 
