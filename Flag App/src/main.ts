@@ -98,10 +98,305 @@ export const flagThePost = Devvit.createForm(
     return {
       fields: [
         { name: 'flagReason', label: `Reason`, options: reasonsOptions, helpText: `Choose a flag reason`, type: 'select', required: true, },
-        { name: 'flagContext', label: `Note`, type: 'paragraph', placeholder: `Note to mods`, helpText: `By clicking Flag, you confirm that you are aware that the moderators can see who flags and that you are not abusing this option.`},
+        { name: 'flagContext', label: `Note`, type: 'paragraph', placeholder: `Note to mods`},
+        { name: 'flagLock', label: `Lock`, helpText: `Lock the post`, type: 'boolean', required: true },
       ],
       title: 'Flag form',
+      description: `By clicking Flag, you confirm that you are aware that the moderators can see who flags and that you are not abusing this option.`,
       acceptLabel: 'Flag',
+      cancelLabel: `Cancel`,
+    };
+  },
+  async (_event, context) => {
+  const { reddit, ui } = context;
+
+  const reporter = await context.reddit.getCurrentUser();
+  const subreddit = await reddit.getCurrentSubreddit();
+  const post = (await context.reddit.getPostById(context.postId!));
+  const lockFlag = _event.values.flagLock;
+
+  const sendtoModmail = await context?.settings.get('sendModmail') as boolean;
+  const sendtoDiscord = await context?.settings.get('sendDiscord') as boolean;
+
+
+  const commandRemove = await context?.settings.get('toRemove') as boolean;
+
+  if (!reporter){
+    return console.error(`Unknown reporter.`);
+  };
+
+
+  var tMessage = `Hello u/${reporter?.username},\n\n`;
+
+  tMessage += `Thanks for flagging! We'll review this report and, if necessary, we'll ask for more details.\n\n`;
+
+  tMessage += `**Report details**\n\n`;
+
+  tMessage += `Content from [${post.authorName}](${post.permalink})\n\n`;
+
+  tMessage += `**Report reason**: ${_event.values.flagReason}\n\n`;
+
+  if (_event.values.flagContext){
+    tMessage += `**Context**: ${_event.values.flagContext}\n\n`;
+  };
+
+  tMessage += `~ r/${subreddit.name} Mod Team\n\n\n`;
+
+  if (!post){
+    return ui.showToast(`This content is deleted or already removed by mods!`);
+  }
+    else {
+      if (commandRemove == true){
+      post.remove();
+      };
+  if (!_event.values.flagContext){
+    await context.reddit.report(post, {
+      reason: `${reporter?.username}: ${_event.values.flagReason}`,
+     })
+     ui.showToast(`Flagged, thanks!`);
+
+     if (sendtoModmail == false) {
+      console.log("Not sending to Modmail, skipping...");
+    } else {
+
+     await reddit.sendPrivateMessageAsSubreddit({
+      fromSubredditName: subreddit.name,
+      to: reporter?.username,
+      subject: `Submission report`,
+      text: tMessage,
+    }); };
+
+    if (!lockFlag){
+
+    await context.reddit.addModNote(
+      {
+        subreddit: subreddit.name,
+        user: post.authorName,
+        note: `Submission flagged by ${reporter?.username} - ${_event.values.flagReason}.`,
+        label: 'SPAM_WARNING',
+        redditId: post.id
+      }
+    );
+  } else {
+    post.lock();
+    await context.reddit.addModNote(
+      {
+        subreddit: subreddit.name,
+        user: post.authorName,
+        note: `Submission flagged and locked by ${reporter?.username} - ${_event.values.flagReason}.`,
+        label: 'SPAM_WARNING',
+        redditId: post.id
+      }
+    );
+    console.log(`${reporter.username} has flagged and locked the post!`);
+  }
+    }
+    else {
+  await context.reddit.report(post, {
+    reason: `${reporter?.username}: ${_event.values.flagReason} (context)`,
+   })
+   ui.showToast(`Flagged, thanks!`);
+
+   if (sendtoModmail == false) {
+    console.log("Not sending to Modmail, skipping...");
+  } else {
+
+   await reddit.sendPrivateMessageAsSubreddit({
+    fromSubredditName: subreddit.name,
+    to: reporter?.username,
+    subject: `Submission report`,
+    text: tMessage,
+  });
+};
+
+
+if (!lockFlag){
+  await context.reddit.addModNote(
+    {
+      subreddit: subreddit.name,
+      user: post.authorName,
+      note: `Submission flagged by ${reporter?.username} - ${_event.values.flagReason} (${_event.values.flagContext}).`,
+      label: 'SPAM_WARNING',
+      redditId: post.id
+    }
+  );
+  console.log(`${reporter.username} has flagged the post!`);
+} else {
+  post.lock();
+  await context.reddit.addModNote(
+    {
+      subreddit: subreddit.name,
+      user: post.authorName,
+      note: `Submission flagged and locked by ${reporter?.username} - ${_event.values.flagReason} (${_event.values.flagContext}).`,
+      label: 'SPAM_WARNING',
+      redditId: post.id
+    }
+  );
+  console.log(`${reporter.username} has flagged and locked the post!`);
+}
+  };
+};
+
+  const webhook = await context?.settings.get('webhookReport') as string;
+
+    console.log(`Received Flag trigger event:\n${JSON.stringify(_event)}`);
+
+    if (!webhook) {
+      console.error('No webhook URL provided');
+      return;
+    }
+    else {
+    try {
+      if (sendtoDiscord == false) {
+        console.log("Not sending to Discord, skipping...");
+      } else {
+
+      let payload;
+
+      const discordRole = await context.settings.get('discordRole');
+
+        let discordAlertMessage;
+        if (discordRole) {
+            discordAlertMessage = `Hey <@&${discordRole}>, ${reporter.username} has flagged something!\n\n`;
+        } else {
+          discordAlertMessage = `Hey, ${reporter.username} has flagged something!`;
+        };
+      
+        if (webhook.startsWith('https://discord.com/api/webhooks/')) {
+          console.log("Got Discord webhook, let's go!");
+
+          if (_event.values.flagContext){
+         // Check if the webhook is a Discord webhook
+         payload = {
+          content: discordAlertMessage,
+          embeds: [
+      {
+        title: `${post.title}`,
+        url: `https://reddit.com${post.permalink}`,
+        fields: [
+          {
+            name: 'Subreddit',
+            value: `r/${subreddit.name}`,
+            inline: true,
+          },
+          {
+            name: 'Reporter',
+            value: `${reporter?.username}`,
+            inline: true,
+          },
+          {
+            name: 'Target User',
+            value: `${post.authorName}`,
+            inline: true,
+          },
+          {
+            name: 'Locked',
+            value: `${lockFlag}`,
+            inline: true,
+          },
+          {
+            name: 'Reason',
+            value: `${_event.values.flagReason}`,
+            inline: true,
+          },
+          {
+            name: 'Context',
+            value: `${_event.values.flagContext}`,
+            inline: true,
+          },
+          {
+            name: 'Score',
+            value: `${post.score}`,
+            inline: true,
+          },
+        ],
+      },
+    ],
+  }
+}
+else {
+  payload = {
+    content: discordAlertMessage,
+    embeds: [
+{
+  title: `${post.title}`,
+  url: `https://reddit.com${post.permalink}`,
+  fields: [
+    {
+      name: 'Subreddit',
+      value: `r/${subreddit.name}`,
+      inline: true,
+    },
+    {
+      name: 'Reporter',
+      value: `${reporter?.username}`,
+      inline: true,
+    },
+    {
+      name: 'Target User',
+      value: `${post.authorName}`,
+      inline: true,
+    },
+    {
+      name: 'Locked',
+      value: `${lockFlag}`,
+      inline: true,
+    },
+    {
+      name: 'Reason',
+      value: `${_event.values.flagReason}`,
+      inline: true,
+    },
+    {
+      name: 'Score',
+      value: `${post.score}`,
+      inline: true,
+    },
+  ],
+},
+],
+}
+};
+}
+
+  try {
+    // Send alert to Discord
+    await fetch(webhook, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    console.log("Alert sent to Discord!");
+  }
+  catch (err) {
+    console.error(`Error sending alert: ${err}`);
+  }
+}
+    }
+    catch (err) {
+      console.error(`Error sending alert: ${err}`);
+    }
+}
+  }
+);
+
+export const flagTheLockedPost = Devvit.createForm(
+  ({ reasons }) => {
+    const reasonsOptions = reasons.map((reason: any) => {
+      return { label: reason.title, value: reason.title };
+    });
+
+    return {
+      fields: [
+        { name: 'flagReason', label: `Reason`, options: reasonsOptions, helpText: `Choose a flag reason`, type: 'select', required: true, },
+        { name: 'flagContext', label: `Note`, type: 'paragraph', placeholder: `Note to mods`},
+      ],
+      title: 'Flag form',
+      description: `By clicking Flag, you confirm that you are aware that the moderators can see who flags and that you are not abusing this option.`,
+      acceptLabel: 'Flag',
+      cancelLabel: `Cancel`,
     };
   },
   async (_event, context) => {
@@ -171,7 +466,7 @@ export const flagThePost = Devvit.createForm(
         redditId: post.id
       }
     );
-    }
+  } 
     else {
   await context.reddit.report(post, {
     reason: `${reporter?.username}: ${_event.values.flagReason} (context)`,
@@ -189,6 +484,7 @@ export const flagThePost = Devvit.createForm(
     text: tMessage,
   });
 };
+
 
   await context.reddit.addModNote(
     {
@@ -223,9 +519,9 @@ export const flagThePost = Devvit.createForm(
 
         let discordAlertMessage;
         if (discordRole) {
-            discordAlertMessage = `<@&${discordRole}>\n\n`;
+            discordAlertMessage = `Hey <@&${discordRole}>, ${reporter.username} has flagged something!\n\n`;
         } else {
-          discordAlertMessage = ``;
+          discordAlertMessage = `Hey, ${reporter.username} has flagged something!`;
         };
       
         if (webhook.startsWith('https://discord.com/api/webhooks/')) {
@@ -253,6 +549,11 @@ export const flagThePost = Devvit.createForm(
           {
             name: 'Target User',
             value: `${post.authorName}`,
+            inline: true,
+          },
+          {
+            name: 'Locked',
+            value: `${true}`,
             inline: true,
           },
           {
@@ -296,6 +597,11 @@ else {
     {
       name: 'Target User',
       value: `${post.authorName}`,
+      inline: true,
+    },
+    {
+      name: 'Locked',
+      value: `${true}`,
       inline: true,
     },
     {
@@ -607,6 +913,10 @@ Devvit.addMenuItem({
     const legitUserSetting = settings[SettingName.LegitUsers] as string ?? "";
     const legitUsers = legitUserSetting.split(",").map(user => user.trim().toLowerCase());
 
+    const post = (await context.reddit.getPostById(context.postId!));
+
+    if (!post.locked){
+      console.log(`Post ${post.id} is not locked...`);
     if (legitUsers.includes(reporter?.username.toLowerCase()) || checkMod) {
       console.log(`${reporter?.username} is a legit user or a mod, okay.`);
       return context.ui.showForm(flagThePost, { reasons: reasons });
@@ -614,7 +924,18 @@ Devvit.addMenuItem({
     console.log(`${reporter?.username} is not a legit user, nor a mod.`);
     return ui.showToast("Sorry, you are not allowed to do that!");
   };
-  },
+
+  } else {
+    console.log(`Post ${post.id} is locked...`);
+    if (legitUsers.includes(reporter?.username.toLowerCase()) || checkMod) {
+      console.log(`${reporter?.username} is a legit user or a mod, okay.`);
+      return context.ui.showForm(flagTheLockedPost, { reasons: reasons });
+  } else {
+    console.log(`${reporter?.username} is not a legit user, nor a mod.`);
+    return ui.showToast("Sorry, you are not allowed to do that!");
+  };
+  }
+}
 });
 
 Devvit.addMenuItem({

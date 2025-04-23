@@ -152,6 +152,7 @@ Devvit.addMenuItem({
   location: 'subreddit',
   forUserType: 'moderator',
   label: 'MultiPinger',
+  description: 'Send a message to multiple users at once.',
   onPress: async (_event, context) => {
     const { ui } = context;
     const subreddit = await context.reddit.getCurrentSubreddit();

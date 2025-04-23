@@ -30,7 +30,6 @@ const repostForm = Devvit.createForm(
   },
   async (_event, context) => {
     const { reddit, ui } = context;    
-    const author = _event.values.userA;
     const subreddit = await reddit.getCurrentSubreddit();
     const originalPost = context.postId!;
     const getPost = await context.reddit.getPostById(originalPost);
@@ -44,8 +43,6 @@ const repostForm = Devvit.createForm(
     var newPostBody = `**Original post**: https://reddit.com${getPost.permalink}\n\n`;
 
     newPostBody += oldPostBody;
-
-    newPostBody += `\n\n*This action was performed using the [TitleTweaker](https://reddit.com/u/title-tweaker) app. If the original post contained media files (images, videos, GIFs, ...), they are not uploaded here, so please check the original post for more details.*`;
 
     const titleLength = await context.settings.get<number>(('titleLen'));
 
@@ -124,11 +121,12 @@ Devvit.addTrigger({
     
     firstMsg += `[Terms & conditions](https://www.reddit.com/r/paskapps/wiki/title-tweaker/terms-and-conditions/) | [Privacy Policy](https://www.reddit.com/r/paskapps/wiki/title-tweaker/privacy-policy/) | [Contact](https://reddit.com/message/compose?to=/r/paskapps&subject=TitleTweaker%20App&message=Text%3A%20)\n\n\n`
 
-    await context.reddit.sendPrivateMessageAsSubreddit({
-      fromSubredditName: subreddit.name,
-      to: 'title-tweaker',
+    await context.reddit.modMail.createConversation({
+      body: firstMsg,
+      isAuthorHidden: false,
+      subredditName: subreddit.name,
       subject: `Thanks for installing TitleTweaker!`,
-      text: firstMsg
+      to: null,
     })
 }
 }
