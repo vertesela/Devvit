@@ -73,6 +73,25 @@ Devvit.addSettings([
         defaultValue: true,
       },
     ]
+  },
+  {
+    type: 'group',
+    label: 'Pinned Post Flair',
+    helpText: 'Automatically update flair when a comment is spotlighted',
+    fields: [
+      {
+        name: 'setFlair',
+        type: "boolean",
+        label: "Enable auto-flair on pin?",
+        defaultValue: false
+      },
+      {
+        type: 'string',
+        name: 'spotlightPostFlairText',
+        label: 'Flair label to apply',
+        defaultValue: `Context Provided - Spotlight`,
+      },
+    ]
   }
 ]);
 
@@ -269,6 +288,14 @@ Devvit.addTrigger({
 
     const subreddit = await context.reddit.getCurrentSubreddit();
 
+    var updateMsg = `Hello r/${subreddit.name} mods,\n\n\n`;
+    updateMsg += `You're receiving this message because **Spotlight** has just been updated on your subreddit.\n\n`;
+    updateMsg += `**New in this version:** Spotlight can now automatically **change the post flair** after a comment is pinned.\n`;
+    updateMsg += `This helps signal to users that additional context has been provided via a spotlighted comment.\n`;
+    updateMsg += `You can enable that setting and customize the flair text [here](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app).\n\n`;
+    updateMsg += `[Instructions](https://www.reddit.com/r/paskapps/comments/1f8cmde/introducing_spotlight_an_app_that_allows_op_and/) | [Logs](https://reddit.com/r/${subreddit.name}/w/spotlight/logs) | [Contact](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight%20Support)`;
+
+
     function CurrentCESTDateTime(): string {
       const cestTime = new Date(Date.now() + 2 * 60 * 60000); // CEST is UTC+2
       return cestTime.toISOString().slice(0, 19).replace('T', ' ') + ' CEST';
@@ -340,7 +367,16 @@ Devvit.addTrigger({
             permLevel: WikiPagePermissionLevel.MODS_ONLY,
         });
     }
-    console.log("First log.");
+    console.log("Update log.");
+
+     await context.reddit.modMail.createConversation({
+      body: updateMsg,
+      isAuthorHidden: false,
+      subredditName: subreddit.name,
+      subject: `Spotlight update`,
+      to: null,
+    })
+    console.log("Update message sent!");
 
 }
 }
@@ -367,10 +403,23 @@ const pinThatComment = Devvit.createForm(
     const commentLink = (await context.reddit.getCommentById(commentId)).permalink;
     const commentText = (await context.reddit.getCommentById(commentId)).body?.split("\n\n").join("\n\n> ");
     const pinNote = _event.values.modNote;
+
+    const setSpotlightPostFlair = await context?.settings.get('setFlair') as boolean;
+    const spotlightFlairText = await context?.settings.get('spotlightPostFlairText') as string;
+
+    const postFlair = await context.reddit.setPostFlair({
+      subredditName: subreddit.name, 
+      postId: originalComment.postId, 
+      text: spotlightFlairText, 
+    });
+
+
+
+
     const alertUser = await context?.settings.get('alertUser') as boolean;
     const sendModmail = await context?.settings.get('sendModmail') as boolean;        
     const sendtoDiscord = await context?.settings.get('sendDiscord') as boolean;        
-    const autoLock = await context?.settings.get('autoLock') as boolean;    
+    const autoLock = await context?.settings.get('autoLock') as boolean; 
     
 
     var messageText = `Hello u/${originalComment.authorName},\n\n`;
@@ -403,6 +452,9 @@ const pinThatComment = Devvit.createForm(
     newCom.lock();
     };
     submitPostReply
+    if (setSpotlightPostFlair == true) {
+      postFlair;
+    };
     ui.showToast(`Posted!`);
 
     await context.reddit.addModNote({
