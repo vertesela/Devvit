@@ -325,21 +325,13 @@ Devvit.addTrigger({
     var updateMsg = `Hello r/${subreddit.name} mods,\n\n`;
 
     updateMsg += `You're receiving this message because **Spotlight** has just been updated on r/${subreddit.name}.\n\n`;
-    
-    updateMsg += `✨ **New in this version:**\n\n`;
-    updateMsg += `• Spotlight can now automatically **change the post flair** after a comment is pinned.\n\n`;
-    updateMsg += `• Mods can now optionally allow **the original poster (OP)** to spotlight someone else's comment.\n\n`;
 
-    updateMsg += `🔹 The flair helps signal to users that additional context has been added.\n\n`;
-    updateMsg += `🔹 You can enable both features and configure them [here](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app).\n\n`;
-    
-    updateMsg += `⚠️ A few mods asked where the Spotlight option went after a recent update.\n\n`;
-    updateMsg += `Previously, there were **three Spotlight options** — **one for mods**, **one for trusted users** (accessible via the "three dots" menu on web), and **one for deleting app comments**.\n\n`;
-    updateMsg += `To simplify the UI and reduce confusion, **the separate "mod-only" spotlight button was removed.**\n\n`;
-    updateMsg += `→ Now all users (mods, OPs, and trusted users) use the same **Spotlight** option, accessible via the "..." menu on any comment.\n\n`;
+    updateMsg += `**What's new?**\n\n`;
+    updateMsg += `🔹 Spotlight app got featured in the latest [Snoosletter](https://redditforcommunity.com/blog/snoosletter-may-2025) as the Dev Platform App of the Month for May 2025 → huge thanks to everyone using it, testing it, and sending feedback :)\n\n`;
+    updateMsg += `🔹 Fixed an issue where post flairs were being changed even when auto-flair was disabled → thanks to everyone who reported this!\n\n`;
+    updateMsg += `🔹 Fixed some formatting glitches in app's comments\n\n`;
     
     updateMsg += `[Instructions](https://www.reddit.com/r/paskapps/comments/1f8cmde/introducing_spotlight_an_app_that_allows_op_and/) | [Logs](https://reddit.com/r/${subreddit.name}/w/spotlight/logs) | [Contact](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight%20Support)\n\n\n`;
-    
 
     function CurrentCESTDateTime(): string {
       const cestTime = new Date(Date.now() + 2 * 60 * 60000); // CEST is UTC+2
@@ -414,7 +406,7 @@ Devvit.addTrigger({
     }
     console.log("Update log.");
 
-     await context.reddit.modMail.createConversation({
+    await context.reddit.modMail.createConversation({
       body: updateMsg,
       isAuthorHidden: false,
       subredditName: subreddit.name,
@@ -452,15 +444,6 @@ const pinThatCommentAsOP = Devvit.createForm(
     const setSpotlightPostFlair = await context?.settings.get('setFlair') as boolean;
     const spotlightFlairText = await context?.settings.get('spotlightPostFlairText') as string;
 
-    const postFlair = await context.reddit.setPostFlair({
-      subredditName: subreddit.name, 
-      postId: originalComment.postId, 
-      text: spotlightFlairText, 
-    });
-
-
-
-
     const alertUser = await context?.settings.get('alertUser') as boolean;
     const sendModmail = await context?.settings.get('sendModmail') as boolean;        
     const sendtoDiscord = await context?.settings.get('sendDiscord') as boolean;        
@@ -497,8 +480,15 @@ const pinThatCommentAsOP = Devvit.createForm(
     newCom.lock();
     };
     submitPostReply
-    if (setSpotlightPostFlair == true) {
-      postFlair;
+    if (!setSpotlightPostFlair){
+      console.log("Auto changing the post flair is disabled, skipping...");
+    } else {
+      console.log("Auto changing the post flair is enabled, okay...");
+      await context.reddit.setPostFlair({
+        subredditName: subreddit.name, 
+        postId: originalComment.postId, 
+        text: spotlightFlairText, 
+      });
     };
     ui.showToast(`Posted!`);
 
@@ -659,8 +649,7 @@ const pinThatCommentAsOP = Devvit.createForm(
   else {
     var pinnedComment = `OP has pinned a [comment](https://reddit.com${commentLink}) by u/${originalComment.authorName}:\n\n`;
       pinnedComment += `> ${commentText}\n\n`;
-      pinnedComment += `> **Note from OP**:\n\n`;
-      pinnedComment += `${pinNote}\n\n`;
+      pinnedComment += `**Note from OP**: ${pinNote}\n\n`;
 
 
     const newCom = await context.reddit.submitComment({
@@ -680,6 +669,16 @@ const pinThatCommentAsOP = Devvit.createForm(
     newCom.distinguish(true);
     if (autoLock == true){
       newCom.lock();
+      };
+      if (!setSpotlightPostFlair){
+        console.log("Auto changing the post flair is disabled, skipping...");
+      } else {
+        console.log("Auto changing the post flair is enabled, okay...");
+        await context.reddit.setPostFlair({
+          subredditName: subreddit.name, 
+          postId: originalComment.postId, 
+          text: spotlightFlairText, 
+        });
       };
 
       if (!alertUser){
@@ -869,15 +868,6 @@ const pinThatCommentAsTrustedUser = Devvit.createForm(
     const setSpotlightPostFlair = await context?.settings.get('setFlair') as boolean;
     const spotlightFlairText = await context?.settings.get('spotlightPostFlairText') as string;
 
-    const postFlair = await context.reddit.setPostFlair({
-      subredditName: subreddit.name, 
-      postId: originalComment.postId, 
-      text: spotlightFlairText, 
-    });
-
-
-
-
     const alertUser = await context?.settings.get('alertUser') as boolean;
     const sendModmail = await context?.settings.get('sendModmail') as boolean;        
     const sendtoDiscord = await context?.settings.get('sendDiscord') as boolean;        
@@ -917,8 +907,15 @@ const pinThatCommentAsTrustedUser = Devvit.createForm(
     newCom.lock();
     };
     submitPostReply
-    if (setSpotlightPostFlair == true) {
-      postFlair;
+    if (!setSpotlightPostFlair){
+      console.log("Auto changing the post flair is disabled, skipping...");
+    } else {
+      console.log("Auto changing the post flair is enabled, okay...");
+      await context.reddit.setPostFlair({
+        subredditName: subreddit.name, 
+        postId: originalComment.postId, 
+        text: spotlightFlairText, 
+      });
     };
     ui.showToast(`Posted!`);
 
@@ -1078,7 +1075,7 @@ const pinThatCommentAsTrustedUser = Devvit.createForm(
   }
   else {
     if (usernameVisibility == true){
-    var pinnedComment = `u/${appUser?.username} has pinned [comment](https://reddit.com${commentLink}) by  u/${originalComment.authorName}:\n\n`;
+    var pinnedComment = `u/${appUser?.username} has pinned [comment](https://reddit.com${commentLink}) by u/${originalComment.authorName}:\n\n`;
     pinnedComment += `> ${commentText}\n\n`;
     pinnedComment += `**Note:** ${pinNote}\n\n`;
   } else {
@@ -1104,6 +1101,16 @@ const pinThatCommentAsTrustedUser = Devvit.createForm(
     newCom.distinguish(true);
     if (autoLock == true){
       newCom.lock();
+      };
+      if (!setSpotlightPostFlair){
+        console.log("Auto changing the post flair is disabled, skipping...");
+      } else {
+        console.log("Auto changing the post flair is enabled, okay...");
+        await context.reddit.setPostFlair({
+          subredditName: subreddit.name, 
+          postId: originalComment.postId, 
+          text: spotlightFlairText, 
+        });
       };
 
       if (!alertUser){
@@ -1286,15 +1293,6 @@ const pinThatCommentAsMod = Devvit.createForm(
     const setSpotlightPostFlair = await context?.settings.get('setFlair') as boolean;
     const spotlightFlairText = await context?.settings.get('spotlightPostFlairText') as string;
 
-    const postFlair = await context.reddit.setPostFlair({
-      subredditName: subreddit.name, 
-      postId: originalComment.postId, 
-      text: spotlightFlairText, 
-    });
-
-
-
-
     const alertUser = await context?.settings.get('alertUser') as boolean;
     const sendModmail = await context?.settings.get('sendModmail') as boolean;        
     const sendtoDiscord = await context?.settings.get('sendDiscord') as boolean;        
@@ -1331,8 +1329,15 @@ const pinThatCommentAsMod = Devvit.createForm(
     newCom.lock();
     };
     submitPostReply
-    if (setSpotlightPostFlair == true) {
-      postFlair;
+    if (!setSpotlightPostFlair){
+      console.log("Auto changing the post flair is disabled, skipping...");
+    } else {
+      console.log("Auto changing the post flair is enabled, okay...");
+      await context.reddit.setPostFlair({
+        subredditName: subreddit.name, 
+        postId: originalComment.postId, 
+        text: spotlightFlairText, 
+      });
     };
     ui.showToast(`Posted!`);
 
@@ -1493,8 +1498,7 @@ const pinThatCommentAsMod = Devvit.createForm(
   else {
     var pinnedComment = `Mods have pinned a [comment](https://reddit.com${commentLink}) by u/${originalComment.authorName}:\n\n`;
       pinnedComment += `> ${commentText}\n\n`;
-      pinnedComment += `> **Note:**\n\n`
-      pinnedComment += `${pinNote}\n\n`;
+      pinnedComment += `**Note:** ${pinNote}\n\n`;
 
 
     const newCom = await context.reddit.submitComment({
@@ -1514,6 +1518,16 @@ const pinThatCommentAsMod = Devvit.createForm(
     newCom.distinguish(true);
     if (autoLock == true){
       newCom.lock();
+      };
+      if (!setSpotlightPostFlair){
+        console.log("Auto changing the post flair is disabled, skipping...");
+      } else {
+        console.log("Auto changing the post flair is enabled, okay...");
+        await context.reddit.setPostFlair({
+          subredditName: subreddit.name, 
+          postId: originalComment.postId, 
+          text: spotlightFlairText, 
+        });
       };
 
       if (!alertUser){
