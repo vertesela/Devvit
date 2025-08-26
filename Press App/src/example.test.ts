@@ -1,5 +1,5 @@
 // Run me with `npm test`.
-test('hello test', () => {
+test("hello test", () => {
   expect(true).toBeTruthy();
 });
 
