@@ -22,7 +22,7 @@ Ever wanted to pin someone else’s comment to the top of a thread, but couldn�
 ### 👥 Trusted Users, Mods & OPs
 
 1. **Moderators** should go to the [Dev Platform settings](https://developers.reddit.com) and add some trusted users who will be allowed to spotlight comments  
-   *(e.g. verified accounts, popular helpers – up to the mods)*
+   _(e.g. verified accounts, popular helpers – up to the mods)_
 
 2. To spotlight a comment:
    - Click the comment you want to spotlight
@@ -38,6 +38,7 @@ Ever wanted to pin someone else’s comment to the top of a thread, but couldn�
 You can now set a **custom flair** that will automatically be applied to the post once a comment is spotlighted.
 
 #### Example:
+
 ```
 Context Provided – Spotlight
 ```
@@ -61,6 +62,7 @@ Mods can now enable a setting that allows the **original poster (OP)** to spotli
 Trusted users (and OPs, if allowed) can choose whether or not their username is shown in the app's public comment.
 
 - **Public comment format:**
+
   > 📌 u/ExampleUser has pinned this comment.
 
 - **Anonymous format:**
@@ -88,16 +90,19 @@ Usernames are still visible to moderators via logs and internal actions.
 
 Depending on who spotlighted the comment, the app will post a comment like:
 
-- **Moderator:**  
+- **Moderator:**
+
   > 📌 Mods have pinned a comment by u/{author}.
 
-- **OP:**  
+- **OP:**
+
   > 📌 u/{OP} has pinned a comment by u/{author}.
 
-- **Trusted user:**  
+- **Trusted user:**
+
   > 📌 u/{TrustedUser} has pinned a comment by u/{author}.
 
-- **Anonymous:**  
+- **Anonymous:**
   > 📌 Pinned comment from u/{author}.
 
 ---
