@@ -1,108 +1,111 @@
-# 🌟 Spotlight – Pin important comments on Reddit (even if they’re not yours)
+# 🌟 Spotlight - Pin comments that matter
 
-Do you moderate a subreddit where a company, organization, or trusted user sometimes comments — but they aren’t a mod?
+Sometimes the most helpful comment in a thread comes from someone who isn’t a mod - a company rep, an expert, or just a user with the right context. Normally you can’t pin their reply. Spotlight fixes that.
 
-Ever wanted to pin someone else’s comment to the top of a thread, but couldn’t?
-
-**Spotlight** is a Dev Platform app that allows mods, trusted users, and optionally the original poster (OP) to pin someone else's comment to the top of a post — directly and visibly.
+**Spotlight** is a Dev Platform app that lets moderators, trusted users, and (optionally) the original poster (OP) pin another user’s comment to the top of a post.
 
 ---
 
-## ✅ What Spotlight can do
+## What Spotlight does
 
-- **Pin comments** from other users – mods, trusted users, and optionally OPs (if enabled)
-- **Delete content** created by the app – mods only
-- **Automatically change the post flair** when a comment is spotlighted
-- **Send optional webhook alerts** to Discord (configurable by mods)
+- **Allows mods, trusted users, and OPs (if enabled) to pin comments**
+- **Lets mods remove any comment created by the app**
+- **Can automatically apply a post flair when a comment is spotlighted**
+- **Supports optional Discord webhook notifications**
 
----
-
-## 🛠 Instructions
-
-### 👥 Trusted Users, Mods & OPs
-
-1. **Moderators** should go to the [Dev Platform settings](https://developers.reddit.com) and add some trusted users who will be allowed to spotlight comments  
-   *(e.g. verified accounts, popular helpers – up to the mods)*
-
-2. To spotlight a comment:
-   - Click the comment you want to spotlight
-   - Select the **Spotlight** option
-   - Fill in the form that appears (via Devvit UI), then click OK
-
-3. That’s it! The spotlighted comment will appear pinned directly under the post.
+All of this can be configured in the app settings.
 
 ---
 
-### ⚙️ Flair Feature (optional)
+## How to use it
 
-You can now set a **custom flair** that will automatically be applied to the post once a comment is spotlighted.
+### Trusted users, mods and OPs
+
+1. **Moderators** add trusted users in the [Dev Platform settings](https://developers.reddit.com/apps/spotlight-app) - e.g. verified accounts, popular helpers – up to the mods.
+
+2. To spotlight a comment, open it and select Spotlight from the menu.
+
+3. Fill out the short form and confirm. The comment will be pinned under the post.
+
+That’s all you need to do.
+
+---
+
+### If you're a regular user and want to use Spotlight
+
+- Spotlight isn’t automatically available to everyone. If you’d like the ability to spotlight comments on a specific subreddit, contact that sub’s moderators and ask them to add you as a trusted user.
+
+- Whether they grant access is entirely up to the moderation team of that subreddit.
+
+---
+
+## Optional features
+
+### Automatic flair
+
+- You can set a custom flair that’s applied once a comment is spotlighted.
+- Useful for posts where added context or clarification needs to be visible.
 
 #### Example:
+
 ```
 Context Provided – Spotlight
 ```
 
-- Helps alert readers that important context has been added
 - You can enable this feature and customize the flair text in the app settings
 
----
+### OP spotlighting
 
-### 👤 OP Support (optional)
+- Mods can allow the original poster to spotlight another user’s comment - helpful for AMAs, Q&A threads, or posts where the OP is actively involved.
 
-Mods can now enable a setting that allows the **original poster (OP)** to spotlight another user's comment.
+### Anonymous spotlight
 
-- When enabled, OP will see the Spotlight option just like trusted users
-- Great for AMA threads, curated discussions, or personal clarifications
-
----
-
-### 🕵️ Anonymous Option
-
-Trusted users (and OPs, if allowed) can choose whether or not their username is shown in the app's public comment.
+- Trusted users (and OPs, if enabled) can choose to spotlight a comment without showing their username publicly.
 
 - **Public comment format:**
-  > 📌 u/ExampleUser has pinned this comment.
+
+  > 📌 u/TrustedUser has pinned a comment by u/ExampleUser.
 
 - **Anonymous format:**
-  > 📌 This comment was pinned via Spotlight.
 
-Usernames are still visible to moderators via logs and internal actions.
+  > 📌 Pinned comment from u/ExampleUser.
 
----
-
-### 🔐 Mods Only
-
-- [Go to Dev Settings](https://developers.reddit.com) to manage your app config
-
-- To delete a comment made by `u/spotlight-app`, simply:
-  - Go to the comment
-  - Open mod tools → Select **[Spotlight] – Delete content**
-  - The comment will be removed
-
-- All spotlight activity is logged in your subreddit’s wiki page:  
-  `/w/spotlight/logs` → Updated after every spotlight
+- Mods will still see who performed the action in the logs.
 
 ---
 
-## 💬 Message & Comment Styles
+## Mod Tools
 
-Depending on who spotlighted the comment, the app will post a comment like:
+- Configure the app through your Dev Platform settings.
 
-- **Moderator:**  
+- To remove a comment posted by `u/spotlight-app`, open the comment → mod tools → `[Spotlight] Delete content`.
+
+- All spotlight actions are logged in `/w/spotlight/logs` on your subreddit.
+
+---
+
+## What the app posts
+
+Depending on who spotlighted the comment, Spotlight will post:
+
+- **Moderator:**
+
   > 📌 Mods have pinned a comment by u/{author}.
 
-- **OP:**  
+- **OP:**
+
   > 📌 u/{OP} has pinned a comment by u/{author}.
 
-- **Trusted user:**  
+- **Trusted user:**
+
   > 📌 u/{TrustedUser} has pinned a comment by u/{author}.
 
-- **Anonymous:**  
+- **Anonymous:**
   > 📌 Pinned comment from u/{author}.
 
 ---
 
-## 📚 Resources
+## Resources
 
 - [Setup instructions & feature post](https://www.reddit.com/r/paskapps/comments/1f8cmde/introducing_spotlight_an_app_that_allows_op_and/)
 - [Terms & Conditions](https://www.reddit.com/r/paskapps/wiki/spotlight/terms-and-conditions)
@@ -110,7 +113,7 @@ Depending on who spotlighted the comment, the app will post a comment like:
 
 ---
 
-## 🔗 Source Code and License
+## Source code & license
 
 The source code for the Spotlight app is available on [GitHub](https://github.com/vertesela/Devvit/tree/main/Spotlight).
 
@@ -119,8 +122,8 @@ This app was developed in compliance with [Reddit's Developer Terms](https://www
 
 ---
 
-## 🛠 Support
+## Support
 
-If you encounter any issues or have questions, please [send a message](https://www.reddit.com/message/compose?to=/r/paskapps).
+If you run into any issues or have questions, please do not message the bot or the app directly because that inbox isn’t monitored. The correct way to reach the developer ([u/paskatulas](https://reddit.com/u/paskatulas)) is through [r/paskapps modmail](https://www.reddit.com/message/compose?to=/r/paskapps), so all reports stay organized in one place.
 
-Thank you for using Spotlight — hope it helps your subreddit stay clearer, calmer, and more focused.
+Thank you for using Spotlight - hope it helps your subreddit stay clearer, calmer, and more focused.

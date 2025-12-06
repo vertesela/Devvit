@@ -1,16 +1,21 @@
-import { Comment } from '@devvit/protos';
-import { Devvit, WikiPage, WikiPagePermissionLevel,} from '@devvit/public-api';
-import { Paragraph } from '@devvit/shared-types/richtext/types.js';
-import {isModerator, submitPostReply, setLockByPostId, isBanned} from "devvit-helpers";
+import { Comment } from "@devvit/protos";
+import { Devvit, WikiPage, WikiPagePermissionLevel } from "@devvit/public-api";
+import { Paragraph } from "@devvit/shared-types/richtext/types.js";
+import {
+  isModerator,
+  submitPostReply,
+  setLockByPostId,
+  isBanned,
+} from "devvit-helpers";
 
 Devvit.configure({
   redditAPI: true, // Enable access to Reddit API
-  http: true
+  http: true,
 });
 
-export enum SettingName{
+export enum SettingName {
   TrustedUsers = "trustedUsers",
-};
+}
 
 Devvit.addSettings([
   {
@@ -19,226 +24,233 @@ Devvit.addSettings([
     label: "List of trusted users who can use the app",
   },
   {
-    name: 'OPoption',
+    name: "OPoption",
     type: "boolean",
     label: "Allow OP to pin the comment?",
-    defaultValue: false
+    defaultValue: false,
   },
   {
-    name: 'autoLock',
+    name: "autoLock",
     type: "boolean",
     label: "Auto-lock app comments",
-    defaultValue: true
+    defaultValue: true,
   },
   {
-    type: 'boolean',
-    name: 'sendModmail',
-    label: 'Send to Modmail?',
+    type: "boolean",
+    name: "sendModmail",
+    label: "Send to Modmail?",
     helpText: `Choose this if you'd like to receive notification for mod pinnings in Modmail.`,
-    defaultValue: false
+    defaultValue: false,
   },
   {
-    type: 'group',
-    label: 'Discord',
-    helpText: 'Notify moderators on the Discord server.',
+    type: "group",
+    label: "Discord",
+    helpText: "Notify moderators on the Discord server.",
     fields: [
       {
-        type: 'boolean',
-        name: 'sendDiscord',
-        label: 'Send to Discord?',
-        helpText: `Choose this if you'd like to receive notification for mod pinnings on the Discord server.`
+        type: "boolean",
+        name: "sendDiscord",
+        label: "Send to Discord?",
+        helpText: `Choose this if you'd like to receive notification for mod pinnings on the Discord server.`,
       },
       {
-        type: 'string',
-        name: 'webhook',
-        label: 'Webhook URL',
+        type: "string",
+        name: "webhook",
+        label: "Webhook URL",
       },
       {
-        type: 'string',
-        name: 'discordRole',
-        label: 'Role ID to ping',
+        type: "string",
+        name: "discordRole",
+        label: "Role ID to ping",
       },
-    ]
+    ],
   },
   {
-    type: 'group',
-    label: 'Notification',
-    helpText: 'Notify user about pinning the comment.',
+    type: "group",
+    label: "Notification",
+    helpText: "Notify user about pinning the comment.",
     fields: [
       {
-        name: 'alertUser',
+        name: "alertUser",
         type: "boolean",
         label: "Send a notification to user for pinning the comment",
-        defaultValue: false
+        defaultValue: false,
       },
       {
-        type: 'boolean',
-        name: 'autoArchive',
-        label: 'Auto-archive app messages?',
+        type: "boolean",
+        name: "autoArchive",
+        label: "Auto-archive app messages?",
         helpText: `If true, app will automatically archive app-messages. `,
         defaultValue: true,
       },
-    ]
+    ],
   },
   {
-    type: 'group',
-    label: 'Pinned Post Flair',
-    helpText: 'Automatically update flair when a comment is spotlighted',
+    type: "group",
+    label: "Pinned Post Flair",
+    helpText: "Automatically update flair when a comment is spotlighted",
     fields: [
       {
-        name: 'setFlair',
+        name: "setFlair",
         type: "boolean",
         label: "Enable auto-flair on pin?",
-        defaultValue: false
+        defaultValue: false,
       },
       {
-        type: 'string',
-        name: 'spotlightPostFlairText',
-        label: 'Flair label to apply',
+        type: "string",
+        name: "spotlightPostFlairText",
+        label: "Flair label to apply",
         defaultValue: `Context Provided - Spotlight`,
       },
-    ]
-  }
+    ],
+  },
 ]);
 
 Devvit.addMenuItem({
-location: 'comment',
-label: 'Spotlight',
-description: 'Pin this comment',
-onPress: async (_event, context) => {
-  const { ui } = context;
+  location: "comment",
+  label: "Spotlight",
+  description: "Pin this comment",
+  onPress: async (_event, context) => {
+    const { ui } = context;
 
-  const subreddit = await context.reddit.getCurrentSubreddit();
-  const currentUser = await context.reddit.getCurrentUser();
-  const appUser = await context.reddit.getCurrentUser();
-  const commentId = await context.commentId!;
-  const modName = await context.reddit.getCurrentUser();
-  const originalComment = (await context.reddit.getCommentById(commentId));
-  const postID = originalComment.postId;
-  const post = context.reddit.getPostById(postID);
-  const commentLink = (await context.reddit.getCommentById(commentId)).permalink;
-  const perms = await currentUser?.getModPermissionsForSubreddit(subreddit.name);
-  const originalPoster = (await post).authorName;
-  const OPoption = await context.settings.get<boolean>(('OPoption'));
+    const subreddit = await context.reddit.getCurrentSubreddit();
+    const currentUser = await context.reddit.getCurrentUser();
+    const appUser = await context.reddit.getCurrentUser();
+    const commentId = await context.commentId!;
+    const modName = await context.reddit.getCurrentUser();
+    const originalComment = await context.reddit.getCommentById(commentId);
+    const postID = originalComment.postId;
+    const post = context.reddit.getPostById(postID);
+    const commentLink = (await context.reddit.getCommentById(commentId))
+      .permalink;
+    const perms = await currentUser?.getModPermissionsForSubreddit(
+      subreddit.name,
+    );
+    const originalPoster = (await post).authorName;
+    const OPoption = await context.settings.get<boolean>("OPoption");
 
+    const spotlighter = await context.reddit.getCurrentUser();
 
-
-  const spotlighter = await context.reddit.getCurrentUser();
-
-  if (!spotlighter){
-    return ui.showToast("Spotlighter not found!");
-  }
+    if (!spotlighter) {
+      return ui.showToast("Spotlighter not found!");
+    }
 
     const settings = await context.settings.getAll();
-    const trustedUserSetting = settings[SettingName.TrustedUsers] as string ?? "";
-    const trustedUsers = trustedUserSetting.split(",").map(user => user.trim().toLowerCase());
+    const trustedUserSetting =
+      (settings[SettingName.TrustedUsers] as string) ?? "";
+    const trustedUsers = trustedUserSetting
+      .split(",")
+      .map((user) => user.trim().toLowerCase());
 
-    const isTrustedUser = trustedUsers.includes(spotlighter?.username.toLowerCase());
-    const isModWithPerms = perms?.includes('posts') || perms?.includes('all');
+    const isTrustedUser = trustedUsers.includes(
+      spotlighter?.username.toLowerCase(),
+    );
+    const isModWithPerms = perms?.includes("posts") || perms?.includes("all");
     const isOriginalPoster = spotlighter?.username === originalPoster;
-
 
     if (OPoption) {
       console.log(`OP pinning is enabled on ${subreddit.name}.`);
-      
+
       if (isOriginalPoster) {
         console.log(`${spotlighter?.username} is the OP.`);
-      ui.showForm(pinThatCommentAsOP);
-      return;
-    } else {
-      console.log(`${spotlighter?.username} is not the OP.`);
-  }
-}
-
-if (isModWithPerms) {
-  console.log(`${spotlighter?.username} is a moderator with sufficient permissions.`);
-  ui.showForm(pinThatCommentAsMod);
-  return;
-}
-
-if (isTrustedUser) {
-  console.log(`${spotlighter?.username} is on the trusted user list.`);
-  ui.showForm(pinThatCommentAsTrustedUser);
-  return;
-}
-
-console.log(`${spotlighter?.username} is not allowed to pin comments.`);
-ui.showToast("You're not allowed to use Spotlight on this subreddit.");
-
-
-        function CurrentCETDateTime(): string {
-          const cetTime = new Date(Date.now() + 1 * 60 * 60000); // CET is UTC+1
-          return cetTime.toISOString().slice(0, 19).replace('T', ' ') + ' CET';
+        ui.showForm(pinThatCommentAsOP);
+        return;
+      } else {
+        console.log(`${spotlighter?.username} is not the OP.`);
       }
-    
-        const wikiPageName = "spotlight/logs";
-          let wikiPage: WikiPage | undefined;
-        try {
-            wikiPage = await context.reddit.getWikiPage(subreddit.name, wikiPageName);
-        } catch {
-            //
-        }
-    
-          var pageContents = `${wikiPage?.content}\n\n`;
-          pageContents += `⛔ ${CurrentCETDateTime()} - u/${modName?.username} attempted to pin [this comment](https://reddit.com${originalComment.permalink}) by u/${originalComment?.authorName}. **Reason**: NOT_A_TRUSTED_USER\n\n`;
-          pageContents += `---\n\n`;
-    
-          const wikiPageOptions = {
-            subredditName: subreddit.name,
-            page: wikiPageName,
-            content: pageContents,
-            reason: "Logs updated",
-        };
-      
-    
-        if (wikiPage) {
-            await context.reddit.updateWikiPage(wikiPageOptions);
-        } else {
-            await context.reddit.createWikiPage(wikiPageOptions);
-            await context.reddit.updateWikiPageSettings({
-                subredditName: subreddit.name,
-                page: wikiPageName,
-                listed: true,
-                permLevel: WikiPagePermissionLevel.MODS_ONLY,
-            });
-        }
-        console.log("Logs page edited.");  
-}
+    }
+
+    if (isModWithPerms) {
+      console.log(
+        `${spotlighter?.username} is a moderator with sufficient permissions.`,
+      );
+      ui.showForm(pinThatCommentAsMod);
+      return;
+    }
+
+    if (isTrustedUser) {
+      console.log(`${spotlighter?.username} is on the trusted user list.`);
+      ui.showForm(pinThatCommentAsTrustedUser);
+      return;
+    }
+
+    console.log(`${spotlighter?.username} is not allowed to pin comments.`);
+    ui.showToast("You're not allowed to use Spotlight on this subreddit.");
+
+    function CurrentCETDateTime(): string {
+      const cetTime = new Date(Date.now() + 1 * 60 * 60000); // CET is UTC+1
+      return cetTime.toISOString().slice(0, 19).replace("T", " ") + " CET";
+    }
+
+    const wikiPageName = "spotlight/logs";
+    let wikiPage: WikiPage | undefined;
+    try {
+      wikiPage = await context.reddit.getWikiPage(subreddit.name, wikiPageName);
+    } catch {
+      //
+    }
+
+    var pageContents = `${wikiPage?.content}\n\n`;
+    pageContents += `⛔ ${CurrentCETDateTime()} - u/${modName?.username} attempted to pin [this comment](https://reddit.com${originalComment.permalink}) by u/${originalComment?.authorName}. **Reason**: NOT_A_TRUSTED_USER\n\n`;
+    pageContents += `---\n\n`;
+
+    const wikiPageOptions = {
+      subredditName: subreddit.name,
+      page: wikiPageName,
+      content: pageContents,
+      reason: "Logs updated",
+    };
+
+    if (wikiPage) {
+      await context.reddit.updateWikiPage(wikiPageOptions);
+    } else {
+      await context.reddit.createWikiPage(wikiPageOptions);
+      await context.reddit.updateWikiPageSettings({
+        subredditName: subreddit.name,
+        page: wikiPageName,
+        listed: true,
+        permLevel: WikiPagePermissionLevel.MODS_ONLY,
+      });
+    }
+    console.log("Logs page edited.");
+  },
 });
 
 Devvit.addTrigger({
-  event: 'AppInstall',
+  event: "AppInstall",
   async onEvent(event, context) {
-  
     console.log(`App installed on r/${event.subreddit?.name}.`);
 
     const subreddit = await context.reddit.getCurrentSubreddit();
+    const appAccount = await context.reddit.getAppUser();
+
+    await context.reddit.setUserFlair({
+      subredditName: subreddit.name,
+      username: appAccount.username,
+      text: "Mod Bot 🤖",
+      textColor: "light",
+      backgroundColor: "#FF0000",
+    });
 
     var firstMsg = `Hello r/${subreddit.name} mods,\n\n`;
-    
-    firstMsg += `Thanks for installing Spotlight!\n\n`,
-    
-    firstMsg += `This intuitive tool allows your trusted users and OPs to pin comments from other users.\n\n`,
 
-    firstMsg += `Users can write comments through a simple form and mods are able to pin user's comments by clicking "Pin that comment".\n\n`,
-    
-    firstMsg += `You can set a list of trusted users [here](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app).\n\n`,
-    
-    firstMsg += `[Instructions](https://www.reddit.com/r/paskapps/comments/1f8cmde/introducing_spotlight_an_app_that_allows_op_and/) | [Recent uses](https://reddit.com/r/${subreddit.name}/w/spotlight/logs) | [Contact](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)\n\n\n`
-
-
+    ((firstMsg += `Thanks for installing Spotlight!\n\n`),
+      (firstMsg += `This intuitive tool allows your trusted users and OPs to pin comments from other users.\n\n`),
+      (firstMsg += `Users can write comments through a simple form and mods are able to pin user's comments by clicking "Pin that comment".\n\n`),
+      (firstMsg += `You can set a list of trusted users [here](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app).\n\n`),
+      (firstMsg += `[Instructions](https://www.reddit.com/r/paskapps/comments/1f8cmde/introducing_spotlight_an_app_that_allows_op_and/) | [Recent uses](https://reddit.com/r/${subreddit.name}/w/spotlight/logs) | [Contact](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)\n\n\n`));
 
     function CurrentCESTDateTime(): string {
       const cestTime = new Date(Date.now() + 2 * 60 * 60000); // CEST is UTC+2
-      return cestTime.toISOString().slice(0, 19).replace('T', ' ') + ' CEST';
+      return cestTime.toISOString().slice(0, 19).replace("T", " ") + " CEST";
     }
 
     const wikiPageName = "spotlight";
-      let wikiPage: WikiPage | undefined;
+    let wikiPage: WikiPage | undefined;
     try {
-        wikiPage = await context.reddit.getWikiPage(subreddit.name, wikiPageName);
+      wikiPage = await context.reddit.getWikiPage(subreddit.name, wikiPageName);
     } catch {
-        //
+      //
     }
 
     var pageContents = `* [Instructions](https://www.reddit.com/r/paskapps/comments/1f8cmde/introducing_spotlight_an_app_that_allows_op_and/)\n\n`;
@@ -247,59 +259,59 @@ Devvit.addTrigger({
     pageContents += `* [Contact](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)\n\n`;
     pageContents += `---\n\n`;
 
-      const wikiPageOptions = {
-        subredditName: subreddit.name,
-        page: wikiPageName,
-        content: pageContents,
-        reason: `Initialization completed!`,
+    const wikiPageOptions = {
+      subredditName: subreddit.name,
+      page: wikiPageName,
+      content: pageContents,
+      reason: `Initialization completed!`,
     };
-  
 
     if (wikiPage) {
-        await context.reddit.updateWikiPage(wikiPageOptions);
+      await context.reddit.updateWikiPage(wikiPageOptions);
     } else {
-        await context.reddit.createWikiPage(wikiPageOptions);
-        await context.reddit.updateWikiPageSettings({
-            subredditName: subreddit.name,
-            page: wikiPageName,
-            listed: true,
-            permLevel: WikiPagePermissionLevel.MODS_ONLY,
-        });
+      await context.reddit.createWikiPage(wikiPageOptions);
+      await context.reddit.updateWikiPageSettings({
+        subredditName: subreddit.name,
+        page: wikiPageName,
+        listed: true,
+        permLevel: WikiPagePermissionLevel.MODS_ONLY,
+      });
     }
     console.log("Wiki page updated (first time).");
 
     const wikiPageName2 = "spotlight/logs";
-      let wikiPage2: WikiPage | undefined;
+    let wikiPage2: WikiPage | undefined;
     try {
-        wikiPage2 = await context.reddit.getWikiPage(subreddit.name, wikiPageName);
+      wikiPage2 = await context.reddit.getWikiPage(
+        subreddit.name,
+        wikiPageName,
+      );
     } catch {
-        //
+      //
     }
 
-     var pageLog = `App installed on ${CurrentCESTDateTime()}.\n\n\n`;
-      pageLog += `---\n\n`;
+    var pageLog = `App installed on ${CurrentCESTDateTime()}.\n\n\n`;
+    pageLog += `---\n\n`;
 
-      const wikiPageOptions2 = {
-        subredditName: subreddit.name,
-        page: wikiPageName2,
-        content: pageLog,
-        reason: `App installed.`,
+    const wikiPageOptions2 = {
+      subredditName: subreddit.name,
+      page: wikiPageName2,
+      content: pageLog,
+      reason: `App installed.`,
     };
-  
 
     if (wikiPage2) {
-        await context.reddit.updateWikiPage(wikiPageOptions2);
+      await context.reddit.updateWikiPage(wikiPageOptions2);
     } else {
-        await context.reddit.createWikiPage(wikiPageOptions2);
-        await context.reddit.updateWikiPageSettings({
-            subredditName: subreddit.name,
-            page: wikiPageName2,
-            listed: true,
-            permLevel: WikiPagePermissionLevel.MODS_ONLY,
-        });
+      await context.reddit.createWikiPage(wikiPageOptions2);
+      await context.reddit.updateWikiPageSettings({
+        subredditName: subreddit.name,
+        page: wikiPageName2,
+        listed: true,
+        permLevel: WikiPagePermissionLevel.MODS_ONLY,
+      });
     }
     console.log("First log.");
-
 
     await context.reddit.modMail.createConversation({
       body: firstMsg,
@@ -307,246 +319,257 @@ Devvit.addTrigger({
       subredditName: subreddit.name,
       subject: `Thanks for installing Spotlight!`,
       to: null,
-    })
+    });
     console.log("First message sent!");
-
-}
-}
-); 
+  },
+});
 
 Devvit.addTrigger({
-  event: 'AppUpgrade',
+  event: "AppUpgrade",
   async onEvent(event, context) {
-  
     console.log(`App updated on r/${event.subreddit?.name}`);
 
     const subreddit = await context.reddit.getCurrentSubreddit();
 
+    const appAccount = await context.reddit.getAppUser();
+
+    await context.reddit.setUserFlair({
+      subredditName: subreddit.name,
+      username: appAccount.username,
+      text: "Mod Bot 🤖",
+      textColor: "light",
+      backgroundColor: "#FF0000",
+    });
+
     var updateMsg = `Hello r/${subreddit.name} mods,\n\n`;
 
     updateMsg += `You're receiving this message because **Spotlight** has just been updated on r/${subreddit.name}.\n\n`;
-    
-    updateMsg += `✨ **New in this version:**\n\n`;
-    updateMsg += `• Spotlight can now automatically **change the post flair** after a comment is pinned.\n\n`;
-    updateMsg += `• Mods can now optionally allow **the original poster (OP)** to spotlight someone else's comment.\n\n`;
 
-    updateMsg += `🔹 The flair helps signal to users that additional context has been added.\n\n`;
-    updateMsg += `🔹 You can enable both features and configure them [here](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app).\n\n`;
-    
-    updateMsg += `⚠️ A few mods asked where the Spotlight option went after a recent update.\n\n`;
-    updateMsg += `Previously, there were **three Spotlight options** — **one for mods**, **one for trusted users** (accessible via the "three dots" menu on web), and **one for deleting app comments**.\n\n`;
-    updateMsg += `To simplify the UI and reduce confusion, **the separate "mod-only" spotlight button was removed.**\n\n`;
-    updateMsg += `→ Now all users (mods, OPs, and trusted users) use the same **Spotlight** option, accessible via the "..." menu on any comment.\n\n`;
-    
-    updateMsg += `[Instructions](https://www.reddit.com/r/paskapps/comments/1f8cmde/introducing_spotlight_an_app_that_allows_op_and/) | [Logs](https://reddit.com/r/${subreddit.name}/w/spotlight/logs) | [Contact](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight%20Support)\n\n\n`;
-    
+    updateMsg += `**What's new?**\n\n`;
+    updateMsg += `- Fixed an issue where users did not receive notifications after their comment was spotlighted.\n\n`;
+    updateMsg += `- Added a **“What is Spotlight?”** link below every pinned comment to help users understand why their comment was highlighted.\n\n`;
+    updateMsg += `- Added the **“Mod Bot”** flair for u/spotlight-app so users can more easily recognise official app activity.\n\n`;
+    updateMsg += `- Reddit has recently introduced a new option that lets moderators allow app developers to view installation history and stream logs for their apps. This can be enabled in the developer permissions section of [the app settings](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app). I recommend turning this on - it helps developers identify and resolve issues much faster and makes support significantly easier.\n\n`;
+
+    updateMsg += `**Quick note:**\n\n`;
+    updateMsg += `Spotlight was mentioned as one of the most popular apps during the recent [Reddit Mod World](https://www.reddit.com/r/ModEvents/comments/1og0es3/thanks_everyone_who_watched_our_devvit_panel_hope/) event. In just a little over a year of active development, the app has surpassed **950 installations** across Reddit.\n\n`;
+    updateMsg += `Thank you all for using Spotlight and for the feedback that helped shape this update.\n\n`;
+    updateMsg += `~ u/paskatulas\n\n`;
+
+    updateMsg += `*Please note that this inbox is not monitored. If you have any suggestions or feedback, you can reach me [here](https://reddit.com/message/compose?to=/r/paskapps&subject=App%20Feedback%3A%20Spotlight&message=Text%3A%20).*\n\n`;
 
     function CurrentCESTDateTime(): string {
       const cestTime = new Date(Date.now() + 2 * 60 * 60000); // CEST is UTC+2
-      return cestTime.toISOString().slice(0, 19).replace('T', ' ') + ' CEST';
+      return cestTime.toISOString().slice(0, 19).replace("T", " ") + " CEST";
     }
 
     const wikiPageName = "spotlight";
-      let wikiPage: WikiPage | undefined;
+    let wikiPage: WikiPage | undefined;
     try {
-        wikiPage = await context.reddit.getWikiPage(subreddit.name, wikiPageName);
+      wikiPage = await context.reddit.getWikiPage(subreddit.name, wikiPageName);
     } catch {
-        //
+      //
     }
 
-      var pageContents = `* [Instructions](https://www.reddit.com/r/paskapps/comments/1f8cmde/introducing_spotlight_an_app_that_allows_op_and/)\n\n`;
-      pageContents += `* [Config](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app)\n\n`;
-      pageContents += `* [Logs](https://reddit.com/r/${subreddit.name}/w/spotlight/logs)\n\n`;
-      pageContents += `* [Contact](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)\n\n`;
-      pageContents += `---\n\n`;
+    var pageContents = `* [Instructions](https://www.reddit.com/r/paskapps/comments/1f8cmde/introducing_spotlight_an_app_that_allows_op_and/)\n\n`;
+    pageContents += `* [Config](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app)\n\n`;
+    pageContents += `* [Logs](https://reddit.com/r/${subreddit.name}/w/spotlight/logs)\n\n`;
+    pageContents += `* [Contact](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)\n\n`;
+    pageContents += `---\n\n`;
 
-      const wikiPageOptions = {
-        subredditName: subreddit.name,
-        page: wikiPageName,
-        content: pageContents,
-        reason: `Initialization completed!`,
+    const wikiPageOptions = {
+      subredditName: subreddit.name,
+      page: wikiPageName,
+      content: pageContents,
+      reason: `Initialization completed!`,
     };
-  
 
     if (wikiPage) {
-        await context.reddit.updateWikiPage(wikiPageOptions);
+      await context.reddit.updateWikiPage(wikiPageOptions);
     } else {
-        await context.reddit.createWikiPage(wikiPageOptions);
-        await context.reddit.updateWikiPageSettings({
-            subredditName: subreddit.name,
-            page: wikiPageName,
-            listed: true,
-            permLevel: WikiPagePermissionLevel.MODS_ONLY,
-        });
+      await context.reddit.createWikiPage(wikiPageOptions);
+      await context.reddit.updateWikiPageSettings({
+        subredditName: subreddit.name,
+        page: wikiPageName,
+        listed: true,
+        permLevel: WikiPagePermissionLevel.MODS_ONLY,
+      });
     }
     console.log("Initialization page updated.");
 
     const wikiPageName2 = "spotlight/logs";
-      let wikiPage2: WikiPage | undefined;
+    let wikiPage2: WikiPage | undefined;
     try {
-        wikiPage2 = await context.reddit.getWikiPage(subreddit.name, wikiPageName2);
+      wikiPage2 = await context.reddit.getWikiPage(
+        subreddit.name,
+        wikiPageName2,
+      );
     } catch {
-        //
+      //
     }
 
     var pageLog = `${wikiPage2?.content}\n\n`;
-      pageLog += `App updated on ${CurrentCESTDateTime()}.\n\n\n`;
-      pageLog += `---\n\n`;
+    pageLog += `App updated on ${CurrentCESTDateTime()}.\n\n\n`;
+    pageLog += `---\n\n`;
 
-      const wikiPageOptions2 = {
+    const wikiPageOptions2 = {
+      subredditName: subreddit.name,
+      page: wikiPageName2,
+      content: pageLog,
+      reason: `App updated.`,
+    };
+
+    //
+    if (wikiPage2) {
+      await context.reddit.updateWikiPage(wikiPageOptions2);
+    } else {
+      await context.reddit.createWikiPage(wikiPageOptions2);
+      await context.reddit.updateWikiPageSettings({
         subredditName: subreddit.name,
         page: wikiPageName2,
-        content: pageLog,
-        reason: `App updated.`,
-    };
-  
-//
-    if (wikiPage2) {
-        await context.reddit.updateWikiPage(wikiPageOptions2);
-    } else {
-        await context.reddit.createWikiPage(wikiPageOptions2);
-        await context.reddit.updateWikiPageSettings({
-            subredditName: subreddit.name,
-            page: wikiPageName2,
-            listed: true,
-            permLevel: WikiPagePermissionLevel.MODS_ONLY,
-        });
+        listed: true,
+        permLevel: WikiPagePermissionLevel.MODS_ONLY,
+      });
     }
     console.log("Update log.");
 
-     await context.reddit.modMail.createConversation({
+    await context.reddit.modMail.createConversation({
       body: updateMsg,
       isAuthorHidden: false,
       subredditName: subreddit.name,
       subject: `Spotlight update`,
       to: null,
-    })
+    });
     console.log("Update message sent!");
-
-}
-}
-); 
+  },
+});
 
 const pinThatCommentAsOP = Devvit.createForm(
-    {
-      title: 'Pin that comment (as OP)',
-      fields: [
-        {
-          name: 'modNote',
-          label: 'Note',
-          helpText: 'Optional',
-          type: 'string',
-        },
-      ],
-    },
-    async (_event, context) => {
+  {
+    title: "Pin that comment (as OP)",
+    fields: [
+      {
+        name: "modNote",
+        label: "Note",
+        helpText: "Optional",
+        type: "string",
+      },
+    ],
+  },
+  async (_event, context) => {
     const { reddit, ui } = context;
     const subreddit = await context.reddit.getCurrentSubreddit();
     const commentId = await context.commentId!;
     const OP = await context.reddit.getCurrentUser();
-    const originalComment = (await context.reddit.getCommentById(commentId));
-    const commentLink = (await context.reddit.getCommentById(commentId)).permalink;
-    const commentText = (await context.reddit.getCommentById(commentId)).body?.split("\n\n").join("\n\n> ");
+    const originalComment = await context.reddit.getCommentById(commentId);
+    const commentLink = (await context.reddit.getCommentById(commentId))
+      .permalink;
+    const commentText = (await context.reddit.getCommentById(commentId)).body
+      ?.split("\n\n")
+      .join("\n\n> ");
     const pinNote = _event.values.modNote;
 
-    const setSpotlightPostFlair = await context?.settings.get('setFlair') as boolean;
-    const spotlightFlairText = await context?.settings.get('spotlightPostFlairText') as string;
+    const setSpotlightPostFlair = (await context?.settings.get(
+      "setFlair",
+    )) as boolean;
+    const spotlightFlairText = (await context?.settings.get(
+      "spotlightPostFlairText",
+    )) as string;
 
     const postFlair = await context.reddit.setPostFlair({
-      subredditName: subreddit.name, 
-      postId: originalComment.postId, 
-      text: spotlightFlairText, 
+      subredditName: subreddit.name,
+      postId: originalComment.postId,
+      text: spotlightFlairText,
     });
 
-
-
-
-    const alertUser = await context?.settings.get('alertUser') as boolean;
-    const sendModmail = await context?.settings.get('sendModmail') as boolean;        
-    const sendtoDiscord = await context?.settings.get('sendDiscord') as boolean;        
-    const autoLock = await context?.settings.get('autoLock') as boolean; 
-    
+    const alertUser = (await context?.settings.get("alertUser")) as boolean;
+    const sendModmail = (await context?.settings.get("sendModmail")) as boolean;
+    const sendtoDiscord = (await context?.settings.get(
+      "sendDiscord",
+    )) as boolean;
+    const autoLock = (await context?.settings.get("autoLock")) as boolean;
 
     var messageText = `Hello u/${originalComment.authorName},\n\n`;
 
     messageText += `We would like to inform you that your [comment](https://reddit.com${commentLink}) has been pinned by OP (u/${OP?.username}).\n\n`;
 
-
     var notificationForMods = `**${OP?.username} (OP)** has pinned the [comment](https://reddit.com${commentLink}) by  u/${originalComment.authorName}.\n\n`;
-      notificationForMods += `[Recent uses](https://reddit.com/r/${subreddit.name}/w/spotlight/logs) | [Config](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app) | [Feedback](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)\n\n`;
-  
+    notificationForMods += `[Recent uses](https://reddit.com/r/${subreddit.name}/w/spotlight/logs) | [Config](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app) | [Feedback](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)\n\n`;
 
-    if (!pinNote){
-      
+    if (!pinNote) {
       var pinnedComment = `OP has pinned a [comment](https://reddit.com${commentLink}) by u/${originalComment.authorName}:\n\n`;
       pinnedComment += `> ${commentText}\n\n`;
+      pinnedComment += `^([What is Spotlight?](https://developers.reddit.com/apps/spotlight-app))\n\n`;
 
+      const newCom = await context.reddit.submitComment({
+        id: originalComment.postId,
+        text: pinnedComment,
+      });
 
-    const newCom = await context.reddit.submitComment({
-      id: originalComment.postId, 
-      text: pinnedComment});
+      ((messageText += `You can view pinned comment [here](${newCom.permalink}).\n\n`),
+        (messageText += `Thanks for contributing!\n\n`),
+        (messageText += `~ r/${subreddit.name} Mod Team\n\n`));
 
-    messageText += `You can view pinned comment [here](${newCom.permalink}).\n\n`,
-    messageText += `Thanks for contributing!\n\n`,
-    messageText += `~ r/${subreddit.name} Mod Team\n\n`;
+      newCom.distinguish(true);
 
-    
-    newCom.distinguish(true);
+      if (autoLock == true) {
+        newCom.lock();
+      }
+      submitPostReply;
+      if (setSpotlightPostFlair == true) {
+        postFlair;
+      }
+      ui.showToast(`Posted!`);
 
-    if (autoLock == true){
-    newCom.lock();
-    };
-    submitPostReply
-    if (setSpotlightPostFlair == true) {
-      postFlair;
-    };
-    ui.showToast(`Posted!`);
+      await context.reddit.addModNote({
+        subreddit: subreddit.name,
+        user: originalComment.authorName,
+        label: "HELPFUL_USER",
+        note: `Comment pinned by ${OP?.username}.`,
+        redditId: originalComment.postId,
+      });
 
-    await context.reddit.addModNote({
-      subreddit: subreddit.name,
-      user: originalComment.authorName,
-      label: 'HELPFUL_USER',
-      note: `Comment pinned by ${OP?.username}.`,
-      redditId: originalComment.postId
-    });
+      if (!alertUser) {
+        console.log("No alerting.");
+      } else {
+        console.log("Alerting user...");
+        await context.reddit.modMail.createConversation({
+          subredditName: subreddit.name,
+          to: originalComment.authorName,
+          isAuthorHidden: true,
+          subject: `Your comment has been pinned by OP`,
+          body: messageText,
+        });
+      }
 
-    if (!alertUser){
-      console.log('No alerting.')
-    } else {
-      console.log("Alerting user...");
-      await context.reddit.sendPrivateMessageAsSubreddit({
-        fromSubredditName: subreddit.name,
-        to: originalComment.authorName,
-        subject: `Your comment has been pinned by OP`,
-        text: messageText
-      })
-    };
+      if (!sendModmail) {
+        console.log("No mod-alerting.");
+      } else {
+        console.log("Alerting mods...");
+        await context.reddit.modMail.createConversation({
+          body: notificationForMods,
+          isAuthorHidden: false,
+          subredditName: subreddit.name,
+          subject: `${OP?.username} has used Spotlight`,
+          to: null,
+        });
+      }
 
-    if (!sendModmail){
-      console.log('No mod-alerting.')
-    } else {
-      console.log("Alerting mods...");
-      await context.reddit.modMail.createConversation({
-        body: notificationForMods,
-        isAuthorHidden: false,
-        subredditName: subreddit.name,
-        subject: `${OP?.username} has used Spotlight`,
-        to: null,
-      })
-    };
+      function CurrentCETDateTime(): string {
+        const cetTime = new Date(Date.now() + 1 * 60 * 60000); // CET is UTC+1
+        return cetTime.toISOString().slice(0, 19).replace("T", " ") + " CET";
+      }
 
-    function CurrentCETDateTime(): string {
-      const cetTime = new Date(Date.now() + 1 * 60 * 60000); // CET is UTC+1
-      return cetTime.toISOString().slice(0, 19).replace('T', ' ') + ' CET';
-  }
-
-    const wikiPageName = "spotlight/logs";
+      const wikiPageName = "spotlight/logs";
       let wikiPage: WikiPage | undefined;
-    try {
-        wikiPage = await context.reddit.getWikiPage(subreddit.name, wikiPageName);
-    } catch {
+      try {
+        wikiPage = await context.reddit.getWikiPage(
+          subreddit.name,
+          wikiPageName,
+        );
+      } catch {
         //
-    }
+      }
 
       var pageContents = `${wikiPage?.content}\n\n`;
       pageContents += `✅ ${CurrentCETDateTime()} - u/${OP?.username} (OP) successfully pinned a [comment](https://reddit.com${commentLink}) by u/${originalComment?.authorName}.\n\n`;
@@ -559,151 +582,139 @@ const pinThatCommentAsOP = Devvit.createForm(
         page: wikiPageName,
         content: pageContents,
         reason: "Logs updated",
-    };
-  
+      };
 
-    if (wikiPage) {
+      if (wikiPage) {
         await context.reddit.updateWikiPage(wikiPageOptions);
-    } else {
+      } else {
         await context.reddit.createWikiPage(wikiPageOptions);
         await context.reddit.updateWikiPageSettings({
-            subredditName: subreddit.name,
-            page: wikiPageName,
-            listed: true,
-            permLevel: WikiPagePermissionLevel.MODS_ONLY,
+          subredditName: subreddit.name,
+          page: wikiPageName,
+          listed: true,
+          permLevel: WikiPagePermissionLevel.MODS_ONLY,
         });
-    }
-    console.log("Logs page edited.");
+      }
+      console.log("Logs page edited.");
 
-    const webhook = await context?.settings.get('webhook') as string;
+      const webhook = (await context?.settings.get("webhook")) as string;
 
-    if (!webhook) {
-      console.error('No webhook URL provided');
-      return;
-    }
-    else {
-    try {
-
-      let payload;
-
-      if (sendtoDiscord == false) {
-        console.log("Not sending to Discord, skipping...");
+      if (!webhook) {
+        console.error("No webhook URL provided");
+        return;
       } else {
+        try {
+          let payload;
 
-      const discordRole = await context.settings.get('discordRole');
+          if (sendtoDiscord == false) {
+            console.log("Not sending to Discord, skipping...");
+          } else {
+            const discordRole = await context.settings.get("discordRole");
 
-        let discordAlertMessage;
-        discordAlertMessage = `**${OP?.username} (OP)** has used Spotlight to pin [the comment](https://reddit.com${originalComment.permalink}) by u/${originalComment?.authorName}.\n\n`;
-        
-        if (discordRole) {
-            discordAlertMessage += `<@&${discordRole}>`;
-        } else {
-           discordAlertMessage;
-        };
-      
-        if (webhook.startsWith('https://discord.com/api/webhooks/')) {
-          console.log("Got Discord webhook, let's go!");
+            let discordAlertMessage;
+            discordAlertMessage = `**${OP?.username} (OP)** has used Spotlight to pin [the comment](https://reddit.com${originalComment.permalink}) by u/${originalComment?.authorName}.\n\n`;
 
-   
-         // Check if the webhook is a Discord webhook
-         payload = {
-          content: discordAlertMessage,
-          embeds: [
-{
-  title: `Pinned comment`,
-  url: `https://reddit.com${newCom.permalink}`,
-  fields: [
-    {
-      name: `Recent uses`,
-      value: `[Link](https://reddit.com/r/${subreddit.name}/w/spotlight/logs)`,
-      inline: true,
-    },
-    {
-      name: 'Config',
-      value: `[Link](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app)`,
-      inline: true,
-    },
-    {
-      name: 'Feedback',
-      value: `[Link](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)`,
-      inline: true,
-    },
-  ],
-},
-],
-}
+            if (discordRole) {
+              discordAlertMessage += `<@&${discordRole}>`;
+            } else {
+              discordAlertMessage;
+            }
+
+            if (webhook.startsWith("https://discord.com/api/webhooks/")) {
+              console.log("Got Discord webhook, let's go!");
+
+              // Check if the webhook is a Discord webhook
+              payload = {
+                content: discordAlertMessage,
+                embeds: [
+                  {
+                    title: `Pinned comment`,
+                    url: `https://reddit.com${newCom.permalink}`,
+                    fields: [
+                      {
+                        name: `Recent uses`,
+                        value: `[Link](https://reddit.com/r/${subreddit.name}/w/spotlight/logs)`,
+                        inline: true,
+                      },
+                      {
+                        name: "Config",
+                        value: `[Link](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app)`,
+                        inline: true,
+                      },
+                      {
+                        name: "Feedback",
+                        value: `[Link](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)`,
+                        inline: true,
+                      },
+                    ],
+                  },
+                ],
+              };
+            }
+
+            try {
+              // Send alert to Discord
+              await fetch(webhook, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(payload),
+              });
+              console.log("Alert sent to Discord!");
+            } catch (err) {
+              console.error(`Error sending alert: ${err}`);
+            }
+          }
+        } catch (err) {
+          console.error(`Error sending alert: ${err}`);
         }
-
-  try {
-    // Send alert to Discord
-    await fetch(webhook, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-    console.log("Alert sent to Discord!");
-  }
-  catch (err) {
-    console.error(`Error sending alert: ${err}`);
-  }
-}
-    }
-    catch (err) {
-      console.error(`Error sending alert: ${err}`);
-    }}
-    ui.showToast(`Posted!`);
-
-  }
-  else {
-    var pinnedComment = `OP has pinned a [comment](https://reddit.com${commentLink}) by u/${originalComment.authorName}:\n\n`;
+      }
+      ui.showToast(`Posted!`);
+    } else {
+      var pinnedComment = `OP has pinned a [comment](https://reddit.com${commentLink}) by u/${originalComment.authorName}:\n\n`;
       pinnedComment += `> ${commentText}\n\n`;
-      pinnedComment += `> **Note from OP**:\n\n`;
-      pinnedComment += `${pinNote}\n\n`;
+      pinnedComment += `**Note from OP**: ${pinNote}\n\n`;
+      pinnedComment += `^([What is Spotlight?](https://developers.reddit.com/apps/spotlight-app))\n\n`;
 
+      const newCom = await context.reddit.submitComment({
+        id: originalComment.postId,
+        text: pinnedComment,
+      });
 
-    const newCom = await context.reddit.submitComment({
-      id: originalComment.postId, 
-      text: pinnedComment });
+      ((messageText += `You can view pinned comment [here](${newCom.permalink}).\n\n`),
+        (messageText += `**Note from OP**: ${pinNote}\n\n`),
+        (messageText += `Thanks for contributing!\n\n`),
+        (messageText += `~ r/${subreddit.name} Mod Team\n\n`));
 
-      messageText += `You can view pinned comment [here](${newCom.permalink}).\n\n`,
+      newCom.distinguish(true);
+      if (autoLock == true) {
+        newCom.lock();
+      }
 
-      messageText += `Note from OP:\n\n`,
-  
-      messageText += `> ${pinNote}\n\n`,
-      
-      messageText += `Thanks for contributing!\n\n`,
-  
-      messageText += `~ r/${subreddit.name} Mod Team\n\n`;
-
-    newCom.distinguish(true);
-    if (autoLock == true){
-      newCom.lock();
-      };
-
-      if (!alertUser){
-        console.log('No alerting.')
+      if (!alertUser) {
+        console.log("No alerting.");
       } else {
         console.log("Alerting user...");
-        await context.reddit.sendPrivateMessageAsSubreddit({
-          fromSubredditName: subreddit.name,
+        await context.reddit.modMail.createConversation({
+          subredditName: subreddit.name,
           to: originalComment.authorName,
+          isAuthorHidden: true,
           subject: `Your comment has been pinned by OP`,
-          text: messageText
-        })
-      };
+          body: messageText,
+        });
+      }
 
       await context.reddit.addModNote({
         subreddit: subreddit.name,
         user: originalComment.authorName,
-        label: 'HELPFUL_USER',
+        label: "HELPFUL_USER",
         note: `Comment pinned by ${OP?.username}.`,
-        redditId: originalComment.postId
+        redditId: originalComment.postId,
       });
 
-      if (!sendModmail){
-        console.log('No mod-alerting.')
+      if (!sendModmail) {
+        console.log("No mod-alerting.");
       } else {
         console.log("Alerting mods...");
         await context.reddit.modMail.createConversation({
@@ -712,261 +723,267 @@ const pinThatCommentAsOP = Devvit.createForm(
           subredditName: subreddit.name,
           subject: `${OP?.username} has used Spotlight`,
           to: null,
-        })
-      };
+        });
+      }
 
       function CurrentCETDateTime(): string {
         const cetTime = new Date(Date.now() + 1 * 60 * 60000); // CET is UTC+1
-        return cetTime.toISOString().slice(0, 19).replace('T', ' ') + ' CET';
-    }
-  
-      const wikiPageName = "spotlight/logs";
-        let wikiPage: WikiPage | undefined;
-      try {
-          wikiPage = await context.reddit.getWikiPage(subreddit.name, wikiPageName);
-      } catch {
-          //
+        return cetTime.toISOString().slice(0, 19).replace("T", " ") + " CET";
       }
-  
-        var pageContents = `${wikiPage?.content}\n\n`;
-        pageContents += `✅ ${CurrentCETDateTime()} - u/${OP?.username} (OP) successfully pinned [this comment](https://reddit.com${commentLink}) by u/${originalComment?.authorName}.\n\n`;
-        pageContents += `**Content** ([link](${newCom.permalink})):\n\n`;
-        pageContents += `> ${commentText}\n\n`;
-        pageContents += `**Note from OP**: ${pinNote}\n\n`;
-        pageContents += `---\n\n`;
-  
-        const wikiPageOptions = {
+
+      const wikiPageName = "spotlight/logs";
+      let wikiPage: WikiPage | undefined;
+      try {
+        wikiPage = await context.reddit.getWikiPage(
+          subreddit.name,
+          wikiPageName,
+        );
+      } catch {
+        //
+      }
+
+      var pageContents = `${wikiPage?.content}\n\n`;
+      pageContents += `✅ ${CurrentCETDateTime()} - u/${OP?.username} (OP) successfully pinned [this comment](https://reddit.com${commentLink}) by u/${originalComment?.authorName}.\n\n`;
+      pageContents += `**Content** ([link](${newCom.permalink})):\n\n`;
+      pageContents += `> ${commentText}\n\n`;
+      pageContents += `**Note from OP**: ${pinNote}\n\n`;
+      pageContents += `---\n\n`;
+
+      const wikiPageOptions = {
+        subredditName: subreddit.name,
+        page: wikiPageName,
+        content: pageContents,
+        reason: "Logs updated",
+      };
+
+      if (wikiPage) {
+        await context.reddit.updateWikiPage(wikiPageOptions);
+      } else {
+        await context.reddit.createWikiPage(wikiPageOptions);
+        await context.reddit.updateWikiPageSettings({
           subredditName: subreddit.name,
           page: wikiPageName,
-          content: pageContents,
-          reason: "Logs updated",
-      };
-    
-  
-      if (wikiPage) {
-          await context.reddit.updateWikiPage(wikiPageOptions);
-      } else {
-          await context.reddit.createWikiPage(wikiPageOptions);
-          await context.reddit.updateWikiPageSettings({
-              subredditName: subreddit.name,
-              page: wikiPageName,
-              listed: true,
-              permLevel: WikiPagePermissionLevel.MODS_ONLY,
-          });
+          listed: true,
+          permLevel: WikiPagePermissionLevel.MODS_ONLY,
+        });
       }
       console.log("Logs page edited.");
 
-      const webhook = await context?.settings.get('webhook') as string;
+      const webhook = (await context?.settings.get("webhook")) as string;
 
-    if (!webhook) {
-      console.error('No webhook URL provided');
-      return;
-    }
-    else {
-    try {
-
-      let payload;
-
-      if (sendtoDiscord == false) {
-        console.log("Not sending to Discord, skipping...");
+      if (!webhook) {
+        console.error("No webhook URL provided");
+        return;
       } else {
+        try {
+          let payload;
 
-      const discordRole = await context.settings.get('discordRole');
+          if (sendtoDiscord == false) {
+            console.log("Not sending to Discord, skipping...");
+          } else {
+            const discordRole = await context.settings.get("discordRole");
 
-        let discordAlertMessage;
-        discordAlertMessage = `**${OP?.username} (OP)** has used Spotlight to pin [the comment](https://reddit.com${originalComment.permalink}) by u/${originalComment?.authorName}. **Note**: ${pinNote}\n\n`;
-        
-        if (discordRole) {
-            discordAlertMessage += `<@&${discordRole}>`;
-        } else {
-           discordAlertMessage;
-        };
-      
-        if (webhook.startsWith('https://discord.com/api/webhooks/')) {
-          console.log("Got Discord webhook, let's go!");
+            let discordAlertMessage;
+            discordAlertMessage = `**${OP?.username} (OP)** has used Spotlight to pin [the comment](https://reddit.com${originalComment.permalink}) by u/${originalComment?.authorName}. **Note**: ${pinNote}\n\n`;
 
-   
-         // Check if the webhook is a Discord webhook
-         payload = {
-          content: discordAlertMessage,
-          embeds: [
-{
-  title: `Pinned comment`,
-  url: `https://reddit.com${newCom.permalink}`,
-  fields: [
-    {
-      name: `Recent uses`,
-      value: `[Link](https://reddit.com/r/${subreddit.name}/w/spotlight/logs)`,
-      inline: true,
-    },
-    {
-      name: 'Config',
-      value: `[Link](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app)`,
-      inline: true,
-    },
-    {
-      name: 'Feedback',
-      value: `[Link](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)`,
-      inline: true,
-    },
-  ],
-},
-],
-}
+            if (discordRole) {
+              discordAlertMessage += `<@&${discordRole}>`;
+            } else {
+              discordAlertMessage;
+            }
+
+            if (webhook.startsWith("https://discord.com/api/webhooks/")) {
+              console.log("Got Discord webhook, let's go!");
+
+              // Check if the webhook is a Discord webhook
+              payload = {
+                content: discordAlertMessage,
+                embeds: [
+                  {
+                    title: `Pinned comment`,
+                    url: `https://reddit.com${newCom.permalink}`,
+                    fields: [
+                      {
+                        name: `Recent uses`,
+                        value: `[Link](https://reddit.com/r/${subreddit.name}/w/spotlight/logs)`,
+                        inline: true,
+                      },
+                      {
+                        name: "Config",
+                        value: `[Link](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app)`,
+                        inline: true,
+                      },
+                      {
+                        name: "Feedback",
+                        value: `[Link](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)`,
+                        inline: true,
+                      },
+                    ],
+                  },
+                ],
+              };
+            }
+
+            try {
+              // Send alert to Discord
+              await fetch(webhook, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(payload),
+              });
+              console.log("Alert sent to Discord!");
+            } catch (err) {
+              console.error(`Error sending alert: ${err}`);
+            }
+          }
+        } catch (err) {
+          console.error(`Error sending alert: ${err}`);
         }
-
-  try {
-    // Send alert to Discord
-    await fetch(webhook, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-    console.log("Alert sent to Discord!");
-  }
-  catch (err) {
-    console.error(`Error sending alert: ${err}`);
-  }
-}
+      }
+      ui.showToast(`Posted!`);
     }
-    catch (err) {
-      console.error(`Error sending alert: ${err}`);
-    }}
-    ui.showToast(`Posted!`);
-  }});
+  },
+);
 
 const pinThatCommentAsTrustedUser = Devvit.createForm(
-    {
-      title: 'Pin that comment (as a trusted user)',
-      fields: [
-        {
-          name: 'modNote',
-          label: 'Note',
-          helpText: 'Optional',
-          type: 'string',
-        },
-        {
-          name: 'usernameVisibility',
-          label: 'Let others see that I pinned this',
-          helpText: 'If unchecked, your username will not appear in the pinned message (only mods can see full details).',
-          type: 'boolean',
-        },
-      ],
-    },
-    async (_event, context) => {
+  {
+    title: "Pin that comment (as a trusted user)",
+    fields: [
+      {
+        name: "modNote",
+        label: "Note",
+        helpText: "Optional",
+        type: "string",
+      },
+      {
+        name: "usernameVisibility",
+        label: "Let others see that I pinned this",
+        helpText:
+          "If unchecked, your username will not appear in the pinned message (only mods can see full details).",
+        type: "boolean",
+      },
+    ],
+  },
+  async (_event, context) => {
     const { reddit, ui } = context;
     const subreddit = await context.reddit.getCurrentSubreddit();
     const commentId = await context.commentId!;
     const appUser = await context.reddit.getCurrentUser();
-    const originalComment = (await context.reddit.getCommentById(commentId));
-    const commentLink = (await context.reddit.getCommentById(commentId)).permalink;
-    const commentText = (await context.reddit.getCommentById(commentId)).body?.split("\n\n").join("\n\n> ");
+    const originalComment = await context.reddit.getCommentById(commentId);
+    const commentLink = (await context.reddit.getCommentById(commentId))
+      .permalink;
+    const commentText = (await context.reddit.getCommentById(commentId)).body
+      ?.split("\n\n")
+      .join("\n\n> ");
     const pinNote = _event.values.modNote;
     const usernameVisibility = _event.values.usernameVisibility;
 
-    const setSpotlightPostFlair = await context?.settings.get('setFlair') as boolean;
-    const spotlightFlairText = await context?.settings.get('spotlightPostFlairText') as string;
+    const setSpotlightPostFlair = (await context?.settings.get(
+      "setFlair",
+    )) as boolean;
+    const spotlightFlairText = (await context?.settings.get(
+      "spotlightPostFlairText",
+    )) as string;
 
     const postFlair = await context.reddit.setPostFlair({
-      subredditName: subreddit.name, 
-      postId: originalComment.postId, 
-      text: spotlightFlairText, 
+      subredditName: subreddit.name,
+      postId: originalComment.postId,
+      text: spotlightFlairText,
     });
 
-
-
-
-    const alertUser = await context?.settings.get('alertUser') as boolean;
-    const sendModmail = await context?.settings.get('sendModmail') as boolean;        
-    const sendtoDiscord = await context?.settings.get('sendDiscord') as boolean;        
-    const autoLock = await context?.settings.get('autoLock') as boolean; 
-    
+    const alertUser = (await context?.settings.get("alertUser")) as boolean;
+    const sendModmail = (await context?.settings.get("sendModmail")) as boolean;
+    const sendtoDiscord = (await context?.settings.get(
+      "sendDiscord",
+    )) as boolean;
+    const autoLock = (await context?.settings.get("autoLock")) as boolean;
 
     var messageText = `Hello u/${originalComment.authorName},\n\n`;
 
-    if (usernameVisibility == true){
+    if (usernameVisibility == true) {
       messageText += `We would like to inform you that your [comment](https://reddit.com${commentLink}) has been pinned by u/${appUser?.username}.\n\n`;
     } else
-    messageText += `We would like to inform you that your [comment](https://reddit.com${commentLink}) has been pinned by a trusted user.\n\n`;
-
+      messageText += `We would like to inform you that your [comment](https://reddit.com${commentLink}) has been pinned by a trusted user.\n\n`;
 
     var notificationForMods = `**${appUser?.username}** has pinned the [comment](https://reddit.com${commentLink}) by  u/${originalComment.authorName}.\n\n`;
-      notificationForMods += `[Recent uses](https://reddit.com/r/${subreddit.name}/w/spotlight/logs) | [Config](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app) | [Feedback](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)\n\n`;
-  
+    notificationForMods += `[Recent uses](https://reddit.com/r/${subreddit.name}/w/spotlight/logs) | [Config](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app) | [Feedback](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)\n\n`;
 
-    if (!pinNote){
-      
+    if (!pinNote) {
       var pinnedComment = `Pinned [comment](https://reddit.com${commentLink}) from u/${originalComment.authorName}:\n\n`;
       pinnedComment += `> ${commentText}\n\n`;
+      pinnedComment += `^([What is Spotlight?](https://developers.reddit.com/apps/spotlight-app))\n\n`;
 
+      const newCom = await context.reddit.submitComment({
+        id: originalComment.postId,
+        text: pinnedComment,
+      });
 
-    const newCom = await context.reddit.submitComment({
-      id: originalComment.postId, 
-      text: pinnedComment});
+      ((messageText += `You can view pinned comment [here](${newCom.permalink}).\n\n`),
+        (messageText += `Thanks for contributing!\n\n`),
+        (messageText += `~ r/${subreddit.name} Mod Team\n\n`));
 
-    messageText += `You can view pinned comment [here](${newCom.permalink}).\n\n`,
-    messageText += `Thanks for contributing!\n\n`,
-    messageText += `~ r/${subreddit.name} Mod Team\n\n`;
+      newCom.distinguish(true);
 
-    
-    newCom.distinguish(true);
+      if (autoLock == true) {
+        newCom.lock();
+      }
+      submitPostReply;
+      if (setSpotlightPostFlair == true) {
+        postFlair;
+      }
+      ui.showToast(`Posted!`);
 
-    if (autoLock == true){
-    newCom.lock();
-    };
-    submitPostReply
-    if (setSpotlightPostFlair == true) {
-      postFlair;
-    };
-    ui.showToast(`Posted!`);
+      await context.reddit.addModNote({
+        subreddit: subreddit.name,
+        user: originalComment.authorName,
+        label: "HELPFUL_USER",
+        note: `Comment pinned by ${appUser?.username}.`,
+        redditId: originalComment.postId,
+      });
 
-    await context.reddit.addModNote({
-      subreddit: subreddit.name,
-      user: originalComment.authorName,
-      label: 'HELPFUL_USER',
-      note: `Comment pinned by ${appUser?.username}.`,
-      redditId: originalComment.postId
-    });
+      if (!alertUser) {
+        console.log("No alerting.");
+      } else {
+        console.log("Alerting user...");
+        await context.reddit.modMail.createConversation({
+          subredditName: subreddit.name,
+          to: originalComment.authorName,
+          isAuthorHidden: true,
+          subject: `Your comment has been pinned`,
+          body: messageText,
+        });
+      }
 
-    if (!alertUser){
-      console.log('No alerting.')
-    } else {
-      console.log("Alerting user...");
-      await context.reddit.sendPrivateMessageAsSubreddit({
-        fromSubredditName: subreddit.name,
-        to: originalComment.authorName,
-        subject: `Your comment has been pinned`,
-        text: messageText
-      })
-    };
+      if (!sendModmail) {
+        console.log("No mod-alerting.");
+      } else {
+        console.log("Alerting mods...");
+        await context.reddit.modMail.createConversation({
+          body: notificationForMods,
+          isAuthorHidden: false,
+          subredditName: subreddit.name,
+          subject: `${appUser?.username} has used Spotlight`,
+          to: null,
+        });
+      }
 
-    if (!sendModmail){
-      console.log('No mod-alerting.')
-    } else {
-      console.log("Alerting mods...");
-      await context.reddit.modMail.createConversation({
-        body: notificationForMods,
-        isAuthorHidden: false,
-        subredditName: subreddit.name,
-        subject: `${appUser?.username} has used Spotlight`,
-        to: null,
-      })
-    };
+      function CurrentCETDateTime(): string {
+        const cetTime = new Date(Date.now() + 1 * 60 * 60000); // CET is UTC+1
+        return cetTime.toISOString().slice(0, 19).replace("T", " ") + " CET";
+      }
 
-    function CurrentCETDateTime(): string {
-      const cetTime = new Date(Date.now() + 1 * 60 * 60000); // CET is UTC+1
-      return cetTime.toISOString().slice(0, 19).replace('T', ' ') + ' CET';
-  }
-
-    const wikiPageName = "spotlight/logs";
+      const wikiPageName = "spotlight/logs";
       let wikiPage: WikiPage | undefined;
-    try {
-        wikiPage = await context.reddit.getWikiPage(subreddit.name, wikiPageName);
-    } catch {
+      try {
+        wikiPage = await context.reddit.getWikiPage(
+          subreddit.name,
+          wikiPageName,
+        );
+      } catch {
         //
-    }
+      }
 
       var pageContents = `${wikiPage?.content}\n\n`;
       pageContents += `✅ ${CurrentCETDateTime()} - u/${appUser?.username} successfully pinned [this comment](https://reddit.com${commentLink}) by u/${originalComment?.authorName}.\n\n`;
@@ -979,155 +996,147 @@ const pinThatCommentAsTrustedUser = Devvit.createForm(
         page: wikiPageName,
         content: pageContents,
         reason: "Logs updated",
-    };
-  
+      };
 
-    if (wikiPage) {
+      if (wikiPage) {
         await context.reddit.updateWikiPage(wikiPageOptions);
-    } else {
+      } else {
         await context.reddit.createWikiPage(wikiPageOptions);
         await context.reddit.updateWikiPageSettings({
-            subredditName: subreddit.name,
-            page: wikiPageName,
-            listed: true,
-            permLevel: WikiPagePermissionLevel.MODS_ONLY,
+          subredditName: subreddit.name,
+          page: wikiPageName,
+          listed: true,
+          permLevel: WikiPagePermissionLevel.MODS_ONLY,
         });
-    }
-    console.log("Logs page edited.");
+      }
+      console.log("Logs page edited.");
 
-    const webhook = await context?.settings.get('webhook') as string;
+      const webhook = (await context?.settings.get("webhook")) as string;
 
-    if (!webhook) {
-      console.error('No webhook URL provided');
-      return;
-    }
-    else {
-    try {
-
-      let payload;
-
-      if (sendtoDiscord == false) {
-        console.log("Not sending to Discord, skipping...");
+      if (!webhook) {
+        console.error("No webhook URL provided");
+        return;
       } else {
+        try {
+          let payload;
 
-      const discordRole = await context.settings.get('discordRole');
+          if (sendtoDiscord == false) {
+            console.log("Not sending to Discord, skipping...");
+          } else {
+            const discordRole = await context.settings.get("discordRole");
 
-        let discordAlertMessage;
-        discordAlertMessage = `**${appUser?.username}** has used Spotlight to pin [the comment](https://reddit.com${originalComment.permalink}) by u/${originalComment?.authorName}.\n\n`;
-        
-        if (discordRole) {
-            discordAlertMessage += `<@&${discordRole}>`;
-        } else {
-           discordAlertMessage;
-        };
-      
-        if (webhook.startsWith('https://discord.com/api/webhooks/')) {
-          console.log("Got Discord webhook, let's go!");
+            let discordAlertMessage;
+            discordAlertMessage = `**${appUser?.username}** has used Spotlight to pin [the comment](https://reddit.com${originalComment.permalink}) by u/${originalComment?.authorName}.\n\n`;
 
-   
-         // Check if the webhook is a Discord webhook
-         payload = {
-          content: discordAlertMessage,
-          embeds: [
-{
-  title: `Pinned comment`,
-  url: `https://reddit.com${newCom.permalink}`,
-  fields: [
-    {
-      name: `Recent uses`,
-      value: `[Link](https://reddit.com/r/${subreddit.name}/w/spotlight/logs)`,
-      inline: true,
-    },
-    {
-      name: 'Config',
-      value: `[Link](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app)`,
-      inline: true,
-    },
-    {
-      name: 'Feedback',
-      value: `[Link](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)`,
-      inline: true,
-    },
-  ],
-},
-],
-}
+            if (discordRole) {
+              discordAlertMessage += `<@&${discordRole}>`;
+            } else {
+              discordAlertMessage;
+            }
+
+            if (webhook.startsWith("https://discord.com/api/webhooks/")) {
+              console.log("Got Discord webhook, let's go!");
+
+              // Check if the webhook is a Discord webhook
+              payload = {
+                content: discordAlertMessage,
+                embeds: [
+                  {
+                    title: `Pinned comment`,
+                    url: `https://reddit.com${newCom.permalink}`,
+                    fields: [
+                      {
+                        name: `Recent uses`,
+                        value: `[Link](https://reddit.com/r/${subreddit.name}/w/spotlight/logs)`,
+                        inline: true,
+                      },
+                      {
+                        name: "Config",
+                        value: `[Link](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app)`,
+                        inline: true,
+                      },
+                      {
+                        name: "Feedback",
+                        value: `[Link](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)`,
+                        inline: true,
+                      },
+                    ],
+                  },
+                ],
+              };
+            }
+
+            try {
+              // Send alert to Discord
+              await fetch(webhook, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(payload),
+              });
+              console.log("Alert sent to Discord!");
+            } catch (err) {
+              console.error(`Error sending alert: ${err}`);
+            }
+          }
+        } catch (err) {
+          console.error(`Error sending alert: ${err}`);
         }
+      }
+      ui.showToast(`Posted!`);
+    } else {
+      if (usernameVisibility == true) {
+        var pinnedComment = `u/${appUser?.username} has pinned a [comment](https://reddit.com${commentLink}) by u/${originalComment.authorName}:\n\n`;
+        pinnedComment += `> ${commentText}\n\n`;
+        pinnedComment += `**Note:** ${pinNote}\n\n`;
+        pinnedComment += `^([What is Spotlight?](https://developers.reddit.com/apps/spotlight-app))\n\n`;
+      } else {
+        var pinnedComment = `Pinned [comment](https://reddit.com${commentLink}) from u/${originalComment.authorName}:\n\n`;
+        pinnedComment += `> ${commentText}\n\n`;
+        pinnedComment += `**Note:** ${pinNote}\n\n`;
+        pinnedComment += `^([What is Spotlight?](https://developers.reddit.com/apps/spotlight-app))\n\n`;
+      }
 
-  try {
-    // Send alert to Discord
-    await fetch(webhook, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-    console.log("Alert sent to Discord!");
-  }
-  catch (err) {
-    console.error(`Error sending alert: ${err}`);
-  }
-}
-    }
-    catch (err) {
-      console.error(`Error sending alert: ${err}`);
-    }}
-    ui.showToast(`Posted!`);
+      const newCom = await context.reddit.submitComment({
+        id: originalComment.postId,
+        text: pinnedComment,
+      });
 
-  }
-  else {
-    if (usernameVisibility == true){
-    var pinnedComment = `u/${appUser?.username} has pinned [comment](https://reddit.com${commentLink}) by  u/${originalComment.authorName}:\n\n`;
-    pinnedComment += `> ${commentText}\n\n`;
-    pinnedComment += `**Note:** ${pinNote}\n\n`;
-  } else {
-    var pinnedComment = `Pinned [comment](https://reddit.com${commentLink}) from u/${originalComment.authorName}:\n\n`;
-      pinnedComment += `> ${commentText}\n\n`;
-      pinnedComment += `**Note:** ${pinNote}\n\n`;
-  }
+      ((messageText += `You can view pinned comment [here](${newCom.permalink}).\n\n`),
+        (messageText += `Note:\n\n`),
+        (messageText += `> ${pinNote}\n\n`),
+        (messageText += `Thanks for contributing!\n\n`),
+        (messageText += `~ r/${subreddit.name} Mod Team\n\n`));
 
-    const newCom = await context.reddit.submitComment({
-      id: originalComment.postId, 
-      text: pinnedComment });
+      newCom.distinguish(true);
+      if (autoLock == true) {
+        newCom.lock();
+      }
 
-      messageText += `You can view pinned comment [here](${newCom.permalink}).\n\n`,
-
-      messageText += `Note:\n\n`,
-  
-      messageText += `> ${pinNote}\n\n`,
-      
-      messageText += `Thanks for contributing!\n\n`,
-  
-      messageText += `~ r/${subreddit.name} Mod Team\n\n`;
-
-    newCom.distinguish(true);
-    if (autoLock == true){
-      newCom.lock();
-      };
-
-      if (!alertUser){
-        console.log('No alerting.')
+      if (!alertUser) {
+        console.log("No alerting.");
       } else {
         console.log("Alerting user...");
-        await context.reddit.sendPrivateMessageAsSubreddit({
-          fromSubredditName: subreddit.name,
+        await context.reddit.modMail.createConversation({
+          subredditName: subreddit.name,
           to: originalComment.authorName,
+          isAuthorHidden: true,
           subject: `Your comment has been pinned`,
-          text: messageText
-        })
-      };
+          body: messageText,
+        });
+      }
 
       await context.reddit.addModNote({
         subreddit: subreddit.name,
         user: originalComment.authorName,
-        label: 'HELPFUL_USER',
+        label: "HELPFUL_USER",
         note: `Comment pinned by ${appUser?.username}.`,
-        redditId: originalComment.postId
+        redditId: originalComment.postId,
       });
 
-      if (!sendModmail){
-        console.log('No mod-alerting.')
+      if (!sendModmail) {
+        console.log("No mod-alerting.");
       } else {
         console.log("Alerting mods...");
         await context.reddit.modMail.createConversation({
@@ -1136,251 +1145,257 @@ const pinThatCommentAsTrustedUser = Devvit.createForm(
           subredditName: subreddit.name,
           subject: `${appUser?.username} has used Spotlight`,
           to: null,
-        })
-      };
+        });
+      }
 
       function CurrentCETDateTime(): string {
         const cetTime = new Date(Date.now() + 1 * 60 * 60000); // CET is UTC+1
-        return cetTime.toISOString().slice(0, 19).replace('T', ' ') + ' CET';
-    }
-  
-      const wikiPageName = "spotlight/logs";
-        let wikiPage: WikiPage | undefined;
-      try {
-          wikiPage = await context.reddit.getWikiPage(subreddit.name, wikiPageName);
-      } catch {
-          //
+        return cetTime.toISOString().slice(0, 19).replace("T", " ") + " CET";
       }
-  
-        var pageContents = `${wikiPage?.content}\n\n`;
-        pageContents += `✅ ${CurrentCETDateTime()} - u/${appUser?.username} successfully pinned [this comment](https://reddit.com${commentLink}) by u/${originalComment?.authorName}.\n\n`;
-        pageContents += `**Content** ([link](${newCom.permalink})):\n\n`;
-        pageContents += `> ${commentText}\n\n`;
-        pageContents += `**Note**: ${pinNote}\n\n`;
-        pageContents += `---\n\n`;
-  
-        const wikiPageOptions = {
+
+      const wikiPageName = "spotlight/logs";
+      let wikiPage: WikiPage | undefined;
+      try {
+        wikiPage = await context.reddit.getWikiPage(
+          subreddit.name,
+          wikiPageName,
+        );
+      } catch {
+        //
+      }
+
+      var pageContents = `${wikiPage?.content}\n\n`;
+      pageContents += `✅ ${CurrentCETDateTime()} - u/${appUser?.username} successfully pinned [this comment](https://reddit.com${commentLink}) by u/${originalComment?.authorName}.\n\n`;
+      pageContents += `**Content** ([link](${newCom.permalink})):\n\n`;
+      pageContents += `> ${commentText}\n\n`;
+      pageContents += `**Note**: ${pinNote}\n\n`;
+      pageContents += `---\n\n`;
+
+      const wikiPageOptions = {
+        subredditName: subreddit.name,
+        page: wikiPageName,
+        content: pageContents,
+        reason: "Logs updated",
+      };
+
+      if (wikiPage) {
+        await context.reddit.updateWikiPage(wikiPageOptions);
+      } else {
+        await context.reddit.createWikiPage(wikiPageOptions);
+        await context.reddit.updateWikiPageSettings({
           subredditName: subreddit.name,
           page: wikiPageName,
-          content: pageContents,
-          reason: "Logs updated",
-      };
-    
-  
-      if (wikiPage) {
-          await context.reddit.updateWikiPage(wikiPageOptions);
-      } else {
-          await context.reddit.createWikiPage(wikiPageOptions);
-          await context.reddit.updateWikiPageSettings({
-              subredditName: subreddit.name,
-              page: wikiPageName,
-              listed: true,
-              permLevel: WikiPagePermissionLevel.MODS_ONLY,
-          });
+          listed: true,
+          permLevel: WikiPagePermissionLevel.MODS_ONLY,
+        });
       }
       console.log("Logs page edited.");
 
-      const webhook = await context?.settings.get('webhook') as string;
+      const webhook = (await context?.settings.get("webhook")) as string;
 
-    if (!webhook) {
-      console.error('No webhook URL provided');
-      return;
-    }
-    else {
-    try {
-
-      let payload;
-
-      if (sendtoDiscord == false) {
-        console.log("Not sending to Discord, skipping...");
+      if (!webhook) {
+        console.error("No webhook URL provided");
+        return;
       } else {
+        try {
+          let payload;
 
-      const discordRole = await context.settings.get('discordRole');
+          if (sendtoDiscord == false) {
+            console.log("Not sending to Discord, skipping...");
+          } else {
+            const discordRole = await context.settings.get("discordRole");
 
-        let discordAlertMessage;
-        discordAlertMessage = `**${appUser?.username}** has used Spotlight to pin [the comment](https://reddit.com${originalComment.permalink}) by u/${originalComment?.authorName}. **Note**: ${pinNote}\n\n`;
-        
-        if (discordRole) {
-            discordAlertMessage += `<@&${discordRole}>`;
-        } else {
-           discordAlertMessage;
-        };
-      
-        if (webhook.startsWith('https://discord.com/api/webhooks/')) {
-          console.log("Got Discord webhook, let's go!");
+            let discordAlertMessage;
+            discordAlertMessage = `**${appUser?.username}** has used Spotlight to pin [the comment](https://reddit.com${originalComment.permalink}) by u/${originalComment?.authorName}. **Note**: ${pinNote}\n\n`;
 
-   
-         // Check if the webhook is a Discord webhook
-         payload = {
-          content: discordAlertMessage,
-          embeds: [
-{
-  title: `Pinned comment`,
-  url: `https://reddit.com${newCom.permalink}`,
-  fields: [
-    {
-      name: `Recent uses`,
-      value: `[Link](https://reddit.com/r/${subreddit.name}/w/spotlight/logs)`,
-      inline: true,
-    },
-    {
-      name: 'Config',
-      value: `[Link](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app)`,
-      inline: true,
-    },
-    {
-      name: 'Feedback',
-      value: `[Link](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)`,
-      inline: true,
-    },
-  ],
-},
-],
-}
+            if (discordRole) {
+              discordAlertMessage += `<@&${discordRole}>`;
+            } else {
+              discordAlertMessage;
+            }
+
+            if (webhook.startsWith("https://discord.com/api/webhooks/")) {
+              console.log("Got Discord webhook, let's go!");
+
+              // Check if the webhook is a Discord webhook
+              payload = {
+                content: discordAlertMessage,
+                embeds: [
+                  {
+                    title: `Pinned comment`,
+                    url: `https://reddit.com${newCom.permalink}`,
+                    fields: [
+                      {
+                        name: `Recent uses`,
+                        value: `[Link](https://reddit.com/r/${subreddit.name}/w/spotlight/logs)`,
+                        inline: true,
+                      },
+                      {
+                        name: "Config",
+                        value: `[Link](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app)`,
+                        inline: true,
+                      },
+                      {
+                        name: "Feedback",
+                        value: `[Link](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)`,
+                        inline: true,
+                      },
+                    ],
+                  },
+                ],
+              };
+            }
+
+            try {
+              // Send alert to Discord
+              await fetch(webhook, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(payload),
+              });
+              console.log("Alert sent to Discord!");
+            } catch (err) {
+              console.error(`Error sending alert: ${err}`);
+            }
+          }
+        } catch (err) {
+          console.error(`Error sending alert: ${err}`);
         }
-
-  try {
-    // Send alert to Discord
-    await fetch(webhook, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-    console.log("Alert sent to Discord!");
-  }
-  catch (err) {
-    console.error(`Error sending alert: ${err}`);
-  }
-}
+      }
+      ui.showToast(`Posted!`);
     }
-    catch (err) {
-      console.error(`Error sending alert: ${err}`);
-    }}
-    ui.showToast(`Posted!`);
-}});
+  },
+);
 
 const pinThatCommentAsMod = Devvit.createForm(
-    {
-      title: 'Pin that comment',
-      fields: [
-        {
-          name: 'modNote',
-          label: 'Note',
-          helpText: 'Optional',
-          type: 'string',
-        },
-      ],
-    },
-    async (_event, context) => {
+  {
+    title: "Pin that comment",
+    fields: [
+      {
+        name: "modNote",
+        label: "Note",
+        helpText: "Optional",
+        type: "string",
+      },
+    ],
+  },
+  async (_event, context) => {
     const { reddit, ui } = context;
     const subreddit = await context.reddit.getCurrentSubreddit();
     const commentId = await context.commentId!;
     const modName = await context.reddit.getCurrentUser();
-    const originalComment = (await context.reddit.getCommentById(commentId));
-    const commentLink = (await context.reddit.getCommentById(commentId)).permalink;
-    const commentText = (await context.reddit.getCommentById(commentId)).body?.split("\n\n").join("\n\n> ");
+    const originalComment = await context.reddit.getCommentById(commentId);
+    const commentLink = (await context.reddit.getCommentById(commentId))
+      .permalink;
+    const commentText = (await context.reddit.getCommentById(commentId)).body
+      ?.split("\n\n")
+      .join("\n\n> ");
     const pinNote = _event.values.modNote;
 
-    const setSpotlightPostFlair = await context?.settings.get('setFlair') as boolean;
-    const spotlightFlairText = await context?.settings.get('spotlightPostFlairText') as string;
+    const setSpotlightPostFlair = (await context?.settings.get(
+      "setFlair",
+    )) as boolean;
+    const spotlightFlairText = (await context?.settings.get(
+      "spotlightPostFlairText",
+    )) as string;
 
     const postFlair = await context.reddit.setPostFlair({
-      subredditName: subreddit.name, 
-      postId: originalComment.postId, 
-      text: spotlightFlairText, 
+      subredditName: subreddit.name,
+      postId: originalComment.postId,
+      text: spotlightFlairText,
     });
 
-
-
-
-    const alertUser = await context?.settings.get('alertUser') as boolean;
-    const sendModmail = await context?.settings.get('sendModmail') as boolean;        
-    const sendtoDiscord = await context?.settings.get('sendDiscord') as boolean;        
-    const autoLock = await context?.settings.get('autoLock') as boolean; 
-    
+    const alertUser = (await context?.settings.get("alertUser")) as boolean;
+    const sendModmail = (await context?.settings.get("sendModmail")) as boolean;
+    const sendtoDiscord = (await context?.settings.get(
+      "sendDiscord",
+    )) as boolean;
+    const autoLock = (await context?.settings.get("autoLock")) as boolean;
 
     var messageText = `Hello u/${originalComment.authorName},\n\n`;
 
     messageText += `We would like to inform you that your [comment](https://reddit.com${commentLink}) has been pinned by moderators.\n\n`;
 
-
     var notificationForMods = `**${modName?.username}** has pinned the [comment](https://reddit.com${commentLink}) by u/${originalComment.authorName}.\n\n`;
-      notificationForMods += `[Recent uses](https://reddit.com/r/${subreddit.name}/w/spotlight/logs) | [Config](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app) | [Feedback](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)\n\n`;
-  
+    notificationForMods += `[Recent uses](https://reddit.com/r/${subreddit.name}/w/spotlight/logs) | [Config](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app) | [Feedback](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)\n\n`;
 
-    if (!pinNote){
-      
+    if (!pinNote) {
       var pinnedComment = `Mods have pinned a [comment](https://reddit.com${commentLink}) by u/${originalComment.authorName}:\n\n`;
       pinnedComment += `> ${commentText}\n\n`;
+      pinnedComment += `^([What is Spotlight?](https://developers.reddit.com/apps/spotlight-app))\n\n`;
 
+      const newCom = await context.reddit.submitComment({
+        id: originalComment.postId,
+        text: pinnedComment,
+      });
 
-    const newCom = await context.reddit.submitComment({
-      id: originalComment.postId, 
-      text: pinnedComment});
+      ((messageText += `You can view a pinned comment [here](${newCom.permalink}).\n\n`),
+        (messageText += `Thanks for contributing!\n\n`),
+        (messageText += `~ r/${subreddit.name} Mod Team\n\n`));
 
-    messageText += `You can view a pinned comment [here](${newCom.permalink}).\n\n`,
-    messageText += `Thanks for contributing!\n\n`,
-    messageText += `~ r/${subreddit.name} Mod Team\n\n`;
+      newCom.distinguish(true);
 
-    
-    newCom.distinguish(true);
+      if (autoLock == true) {
+        newCom.lock();
+      }
+      submitPostReply;
+      if (setSpotlightPostFlair == true) {
+        postFlair;
+      }
+      ui.showToast(`Posted!`);
 
-    if (autoLock == true){
-    newCom.lock();
-    };
-    submitPostReply
-    if (setSpotlightPostFlair == true) {
-      postFlair;
-    };
-    ui.showToast(`Posted!`);
+      await context.reddit.addModNote({
+        subreddit: subreddit.name,
+        user: originalComment.authorName,
+        label: "HELPFUL_USER",
+        note: `Comment pinned by ${modName?.username} (mod).`,
+        redditId: originalComment.postId,
+      });
 
-    await context.reddit.addModNote({
-      subreddit: subreddit.name,
-      user: originalComment.authorName,
-      label: 'HELPFUL_USER',
-      note: `Comment pinned by ${modName?.username} (mod).`,
-      redditId: originalComment.postId
-    });
+      if (!alertUser) {
+        console.log("No alerting.");
+      } else {
+        console.log("Alerting user...");
 
-    if (!alertUser){
-      console.log('No alerting.')
-    } else {
-      console.log("Alerting user...");
-      await context.reddit.sendPrivateMessageAsSubreddit({
-        fromSubredditName: subreddit.name,
-        to: originalComment.authorName,
-        subject: `Your comment has been pinned by mods`,
-        text: messageText
-      })
-    };
+        await context.reddit.modMail.createConversation({
+          subredditName: subreddit.name,
+          to: originalComment.authorName,
+          isAuthorHidden: true,
+          subject: `Your comment has been pinned by mods`,
+          body: messageText,
+        });
+      }
 
-    if (!sendModmail){
-      console.log('No mod-alerting.')
-    } else {
-      console.log("Alerting mods...");
-      await context.reddit.modMail.createConversation({
-        body: notificationForMods,
-        isAuthorHidden: false,
-        subredditName: subreddit.name,
-        subject: `${modName?.username} has used Spotlight`,
-        to: null,
-      })
-    };
+      if (!sendModmail) {
+        console.log("No mod-alerting.");
+      } else {
+        console.log("Alerting mods...");
+        await context.reddit.modMail.createConversation({
+          body: notificationForMods,
+          isAuthorHidden: false,
+          subredditName: subreddit.name,
+          subject: `${modName?.username} has used Spotlight`,
+          to: null,
+        });
+      }
 
-    function CurrentCETDateTime(): string {
-      const cetTime = new Date(Date.now() + 1 * 60 * 60000); // CET is UTC+1
-      return cetTime.toISOString().slice(0, 19).replace('T', ' ') + ' CET';
-  }
+      function CurrentCETDateTime(): string {
+        const cetTime = new Date(Date.now() + 1 * 60 * 60000); // CET is UTC+1
+        return cetTime.toISOString().slice(0, 19).replace("T", " ") + " CET";
+      }
 
-    const wikiPageName = "spotlight/logs";
+      const wikiPageName = "spotlight/logs";
       let wikiPage: WikiPage | undefined;
-    try {
-        wikiPage = await context.reddit.getWikiPage(subreddit.name, wikiPageName);
-    } catch {
+      try {
+        wikiPage = await context.reddit.getWikiPage(
+          subreddit.name,
+          wikiPageName,
+        );
+      } catch {
         //
-    }
+      }
 
       var pageContents = `${wikiPage?.content}\n\n`;
       pageContents += `✅ ${CurrentCETDateTime()} - u/${modName?.username} (mod) successfully pinned [this comment](https://reddit.com${commentLink}) by u/${originalComment?.authorName}.\n\n`;
@@ -1393,151 +1408,139 @@ const pinThatCommentAsMod = Devvit.createForm(
         page: wikiPageName,
         content: pageContents,
         reason: "Logs updated",
-    };
-  
+      };
 
-    if (wikiPage) {
+      if (wikiPage) {
         await context.reddit.updateWikiPage(wikiPageOptions);
-    } else {
+      } else {
         await context.reddit.createWikiPage(wikiPageOptions);
         await context.reddit.updateWikiPageSettings({
-            subredditName: subreddit.name,
-            page: wikiPageName,
-            listed: true,
-            permLevel: WikiPagePermissionLevel.MODS_ONLY,
+          subredditName: subreddit.name,
+          page: wikiPageName,
+          listed: true,
+          permLevel: WikiPagePermissionLevel.MODS_ONLY,
         });
-    }
-    console.log("Logs page edited.");
+      }
+      console.log("Logs page edited.");
 
-    const webhook = await context?.settings.get('webhook') as string;
+      const webhook = (await context?.settings.get("webhook")) as string;
 
-    if (!webhook) {
-      console.error('No webhook URL provided');
-      return;
-    }
-    else {
-    try {
-
-      let payload;
-
-      if (sendtoDiscord == false) {
-        console.log("Not sending to Discord, skipping...");
+      if (!webhook) {
+        console.error("No webhook URL provided");
+        return;
       } else {
+        try {
+          let payload;
 
-      const discordRole = await context.settings.get('discordRole');
+          if (sendtoDiscord == false) {
+            console.log("Not sending to Discord, skipping...");
+          } else {
+            const discordRole = await context.settings.get("discordRole");
 
-        let discordAlertMessage;
-        discordAlertMessage = `**${modName?.username} (mod)** has used Spotlight to pin [the comment](https://reddit.com${originalComment.permalink}) by u/${originalComment?.authorName}.\n\n`;
-        
-        if (discordRole) {
-            discordAlertMessage += `<@&${discordRole}>`;
-        } else {
-           discordAlertMessage;
-        };
-      
-        if (webhook.startsWith('https://discord.com/api/webhooks/')) {
-          console.log("Got Discord webhook, let's go!");
+            let discordAlertMessage;
+            discordAlertMessage = `**${modName?.username} (mod)** has used Spotlight to pin [the comment](https://reddit.com${originalComment.permalink}) by u/${originalComment?.authorName}.\n\n`;
 
-   
-         // Check if the webhook is a Discord webhook
-         payload = {
-          content: discordAlertMessage,
-          embeds: [
-{
-  title: `Pinned comment`,
-  url: `https://reddit.com${newCom.permalink}`,
-  fields: [
-    {
-      name: `Recent uses`,
-      value: `[Link](https://reddit.com/r/${subreddit.name}/w/spotlight/logs)`,
-      inline: true,
-    },
-    {
-      name: 'Config',
-      value: `[Link](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app)`,
-      inline: true,
-    },
-    {
-      name: 'Feedback',
-      value: `[Link](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)`,
-      inline: true,
-    },
-  ],
-},
-],
-}
+            if (discordRole) {
+              discordAlertMessage += `<@&${discordRole}>`;
+            } else {
+              discordAlertMessage;
+            }
+
+            if (webhook.startsWith("https://discord.com/api/webhooks/")) {
+              console.log("Got Discord webhook, let's go!");
+
+              // Check if the webhook is a Discord webhook
+              payload = {
+                content: discordAlertMessage,
+                embeds: [
+                  {
+                    title: `Pinned comment`,
+                    url: `https://reddit.com${newCom.permalink}`,
+                    fields: [
+                      {
+                        name: `Recent uses`,
+                        value: `[Link](https://reddit.com/r/${subreddit.name}/w/spotlight/logs)`,
+                        inline: true,
+                      },
+                      {
+                        name: "Config",
+                        value: `[Link](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app)`,
+                        inline: true,
+                      },
+                      {
+                        name: "Feedback",
+                        value: `[Link](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)`,
+                        inline: true,
+                      },
+                    ],
+                  },
+                ],
+              };
+            }
+
+            try {
+              // Send alert to Discord
+              await fetch(webhook, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(payload),
+              });
+              console.log("Alert sent to Discord!");
+            } catch (err) {
+              console.error(`Error sending alert: ${err}`);
+            }
+          }
+        } catch (err) {
+          console.error(`Error sending alert: ${err}`);
         }
-
-  try {
-    // Send alert to Discord
-    await fetch(webhook, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-    console.log("Alert sent to Discord!");
-  }
-  catch (err) {
-    console.error(`Error sending alert: ${err}`);
-  }
-}
-    }
-    catch (err) {
-      console.error(`Error sending alert: ${err}`);
-    }}
-    ui.showToast(`Posted!`);
-
-  }
-  else {
-    var pinnedComment = `Mods have pinned a [comment](https://reddit.com${commentLink}) by u/${originalComment.authorName}:\n\n`;
+      }
+      ui.showToast(`Posted!`);
+    } else {
+      var pinnedComment = `Mods have pinned a [comment](https://reddit.com${commentLink}) by u/${originalComment.authorName}:\n\n`;
       pinnedComment += `> ${commentText}\n\n`;
-      pinnedComment += `> **Note:**\n\n`
-      pinnedComment += `${pinNote}\n\n`;
+      pinnedComment += `**Note:** ${pinNote}\n\n`;
+      pinnedComment += `^([What is Spotlight?](https://developers.reddit.com/apps/spotlight-app))\n\n`;
 
+      const newCom = await context.reddit.submitComment({
+        id: originalComment.postId,
+        text: pinnedComment,
+      });
 
-    const newCom = await context.reddit.submitComment({
-      id: originalComment.postId, 
-      text: pinnedComment });
+      ((messageText += `You can view pinned comment [here](${newCom.permalink}).\n\n`),
+        (messageText += `**Note from mods**: ${pinNote}\n\n`),
+        (messageText += `Thanks for contributing!\n\n`),
+        (messageText += `~ r/${subreddit.name} Mod Team\n\n`));
 
-      messageText += `You can view pinned comment [here](${newCom.permalink}).\n\n`,
+      newCom.distinguish(true);
+      if (autoLock == true) {
+        newCom.lock();
+      }
 
-      messageText += `Note from mods:\n\n`,
-  
-      messageText += `> ${pinNote}\n\n`,
-      
-      messageText += `Thanks for contributing!\n\n`,
-  
-      messageText += `~ r/${subreddit.name} Mod Team\n\n`;
-
-    newCom.distinguish(true);
-    if (autoLock == true){
-      newCom.lock();
-      };
-
-      if (!alertUser){
-        console.log('No alerting.')
+      if (!alertUser) {
+        console.log("No alerting.");
       } else {
         console.log("Alerting user...");
-        await context.reddit.sendPrivateMessageAsSubreddit({
-          fromSubredditName: subreddit.name,
+        await context.reddit.modMail.createConversation({
+          subredditName: subreddit.name,
           to: originalComment.authorName,
+          isAuthorHidden: true,
           subject: `Your comment has been pinned by mods`,
-          text: messageText
-        })
-      };
+          body: messageText,
+        });
+      }
 
       await context.reddit.addModNote({
         subreddit: subreddit.name,
         user: originalComment.authorName,
-        label: 'HELPFUL_USER',
+        label: "HELPFUL_USER",
         note: `Comment pinned by ${modName?.username} (mod).`,
-        redditId: originalComment.postId
+        redditId: originalComment.postId,
       });
 
-      if (!sendModmail){
-        console.log('No mod-alerting.')
+      if (!sendModmail) {
+        console.log("No mod-alerting.");
       } else {
         console.log("Alerting mods...");
         await context.reddit.modMail.createConversation({
@@ -1546,206 +1549,214 @@ const pinThatCommentAsMod = Devvit.createForm(
           subredditName: subreddit.name,
           subject: `${modName?.username} has used Spotlight`,
           to: null,
-        })
-      };
+        });
+      }
 
       function CurrentCETDateTime(): string {
         const cetTime = new Date(Date.now() + 1 * 60 * 60000); // CET is UTC+1
-        return cetTime.toISOString().slice(0, 19).replace('T', ' ') + ' CET';
-    }
-  
-      const wikiPageName = "spotlight/logs";
-        let wikiPage: WikiPage | undefined;
-      try {
-          wikiPage = await context.reddit.getWikiPage(subreddit.name, wikiPageName);
-      } catch {
-          //
+        return cetTime.toISOString().slice(0, 19).replace("T", " ") + " CET";
       }
-  
-        var pageContents = `${wikiPage?.content}\n\n`;
-        pageContents += `✅ ${CurrentCETDateTime()} - u/${modName?.username} (mod) successfully pinned [this comment](https://reddit.com${commentLink}) by u/${originalComment?.authorName}.\n\n`;
-        pageContents += `**Content** ([link](${newCom.permalink})):\n\n`;
-        pageContents += `> ${commentText}\n\n`;
-        pageContents += `**Note**: ${pinNote}\n\n`;
-        pageContents += `---\n\n`;
-  
-        const wikiPageOptions = {
+
+      const wikiPageName = "spotlight/logs";
+      let wikiPage: WikiPage | undefined;
+      try {
+        wikiPage = await context.reddit.getWikiPage(
+          subreddit.name,
+          wikiPageName,
+        );
+      } catch {
+        //
+      }
+
+      var pageContents = `${wikiPage?.content}\n\n`;
+      pageContents += `✅ ${CurrentCETDateTime()} - u/${modName?.username} (mod) successfully pinned [this comment](https://reddit.com${commentLink}) by u/${originalComment?.authorName}.\n\n`;
+      pageContents += `**Content** ([link](${newCom.permalink})):\n\n`;
+      pageContents += `> ${commentText}\n\n`;
+      pageContents += `**Note**: ${pinNote}\n\n`;
+      pageContents += `---\n\n`;
+
+      const wikiPageOptions = {
+        subredditName: subreddit.name,
+        page: wikiPageName,
+        content: pageContents,
+        reason: "Logs updated",
+      };
+
+      if (wikiPage) {
+        await context.reddit.updateWikiPage(wikiPageOptions);
+      } else {
+        await context.reddit.createWikiPage(wikiPageOptions);
+        await context.reddit.updateWikiPageSettings({
           subredditName: subreddit.name,
           page: wikiPageName,
-          content: pageContents,
-          reason: "Logs updated",
-      };
-    
-  
-      if (wikiPage) {
-          await context.reddit.updateWikiPage(wikiPageOptions);
-      } else {
-          await context.reddit.createWikiPage(wikiPageOptions);
-          await context.reddit.updateWikiPageSettings({
-              subredditName: subreddit.name,
-              page: wikiPageName,
-              listed: true,
-              permLevel: WikiPagePermissionLevel.MODS_ONLY,
-          });
+          listed: true,
+          permLevel: WikiPagePermissionLevel.MODS_ONLY,
+        });
       }
       console.log("Logs page edited.");
 
-      const webhook = await context?.settings.get('webhook') as string;
+      const webhook = (await context?.settings.get("webhook")) as string;
 
-    if (!webhook) {
-      console.error('No webhook URL provided');
-      return;
-    }
-    else {
-    try {
-
-      let payload;
-
-      if (sendtoDiscord == false) {
-        console.log("Not sending to Discord, skipping...");
+      if (!webhook) {
+        console.error("No webhook URL provided");
+        return;
       } else {
+        try {
+          let payload;
 
-      const discordRole = await context.settings.get('discordRole');
+          if (sendtoDiscord == false) {
+            console.log("Not sending to Discord, skipping...");
+          } else {
+            const discordRole = await context.settings.get("discordRole");
 
-        let discordAlertMessage;
-        discordAlertMessage = `**${modName?.username} (mod)** has used Spotlight to pin [the comment](https://reddit.com${originalComment.permalink}) by u/${originalComment?.authorName}. **Note**: ${pinNote}\n\n`;
-        
-        if (discordRole) {
-            discordAlertMessage += `<@&${discordRole}>`;
-        } else {
-           discordAlertMessage;
-        };
-      
-        if (webhook.startsWith('https://discord.com/api/webhooks/')) {
-          console.log("Got Discord webhook, let's go!");
+            let discordAlertMessage;
+            discordAlertMessage = `**${modName?.username} (mod)** has used Spotlight to pin [the comment](https://reddit.com${originalComment.permalink}) by u/${originalComment?.authorName}. **Note**: ${pinNote}\n\n`;
 
-   
-         // Check if the webhook is a Discord webhook
-         payload = {
-          content: discordAlertMessage,
-          embeds: [
-{
-  title: `Pinned comment`,
-  url: `https://reddit.com${newCom.permalink}`,
-  fields: [
-    {
-      name: `Recent uses`,
-      value: `[Link](https://reddit.com/r/${subreddit.name}/w/spotlight/logs)`,
-      inline: true,
-    },
-    {
-      name: 'Config',
-      value: `[Link](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app)`,
-      inline: true,
-    },
-    {
-      name: 'Feedback',
-      value: `[Link](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)`,
-      inline: true,
-    },
-  ],
-},
-],
-}
+            if (discordRole) {
+              discordAlertMessage += `<@&${discordRole}>`;
+            } else {
+              discordAlertMessage;
+            }
+
+            if (webhook.startsWith("https://discord.com/api/webhooks/")) {
+              console.log("Got Discord webhook, let's go!");
+
+              // Check if the webhook is a Discord webhook
+              payload = {
+                content: discordAlertMessage,
+                embeds: [
+                  {
+                    title: `Pinned comment`,
+                    url: `https://reddit.com${newCom.permalink}`,
+                    fields: [
+                      {
+                        name: `Recent uses`,
+                        value: `[Link](https://reddit.com/r/${subreddit.name}/w/spotlight/logs)`,
+                        inline: true,
+                      },
+                      {
+                        name: "Config",
+                        value: `[Link](https://developers.reddit.com/r/${subreddit.name}/apps/spotlight-app)`,
+                        inline: true,
+                      },
+                      {
+                        name: "Feedback",
+                        value: `[Link](https://reddit.com/message/compose?to=/r/paskapps&subject=Spotlight&message=Text%3A%20)`,
+                        inline: true,
+                      },
+                    ],
+                  },
+                ],
+              };
+            }
+
+            try {
+              // Send alert to Discord
+              await fetch(webhook, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(payload),
+              });
+              console.log("Alert sent to Discord!");
+            } catch (err) {
+              console.error(`Error sending alert: ${err}`);
+            }
+          }
+        } catch (err) {
+          console.error(`Error sending alert: ${err}`);
         }
-
-  try {
-    // Send alert to Discord
-    await fetch(webhook, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-    console.log("Alert sent to Discord!");
-  }
-  catch (err) {
-    console.error(`Error sending alert: ${err}`);
-  }
-}
+      }
+      ui.showToast(`Posted!`);
     }
-    catch (err) {
-      console.error(`Error sending alert: ${err}`);
-    }}
-    ui.showToast(`Posted!`);
-}});
+  },
+);
 
 Devvit.addMenuItem({
-  location: ['comment'],
-  forUserType: 'moderator',
-  label: '[Spotlight] - Delete content',
-  description: 'Delete content created by Spotlight',
+  location: ["comment"],
+  forUserType: "moderator",
+  label: "[Spotlight] - Delete content",
+  description: "Delete content created by Spotlight",
   onPress: async (event, context) => {
     const { reddit, ui } = context;
     const { location } = event;
     const subreddit = await context.reddit.getCurrentSubreddit();
     const appUser = context.reddit.getAppUser();
     const currentUser = await context.reddit.getCurrentUser();
-    const perms = await currentUser?.getModPermissionsForSubreddit(subreddit.name);
+    const perms = await currentUser?.getModPermissionsForSubreddit(
+      subreddit.name,
+    );
     const commentId = context.commentId!;
     const modName = await context.reddit.getCurrentUser();
-    const spotlightComment = (await context.reddit.getCommentById(commentId));
+    const spotlightComment = await context.reddit.getCommentById(commentId);
 
     function CurrentCETDateTime(): string {
       const cetTime = new Date(Date.now() + 1 * 60 * 60000); // CET is UTC+1
-      return cetTime.toISOString().slice(0, 19).replace('T', ' ') + ' CET';
-  }
+      return cetTime.toISOString().slice(0, 19).replace("T", " ") + " CET";
+    }
 
     const wikiPageName = "spotlight/logs";
-      let wikiPage: WikiPage | undefined;
+    let wikiPage: WikiPage | undefined;
     try {
-        wikiPage = await context.reddit.getWikiPage(subreddit.name, wikiPageName);
+      wikiPage = await context.reddit.getWikiPage(subreddit.name, wikiPageName);
     } catch {
-        //
+      //
     }
 
-
-    if (perms?.includes('posts') || perms?.includes('all')){
-  
-    if ((await context.reddit.getCommentById(context.commentId!)).authorName == (await appUser).username)
-    {
-      spotlightComment.delete(); 
-      console.log(`Spotlight content deleted by ${currentUser?.username}.`); 
-      return ui.showToast('Deleted!');
-
-  }
-    else {
-      ui.showToast(`This is only for content removal by ${(await appUser).username}!`);
-    };
-  } else {
-    ui.showToast(`You don't have the necessary permissions.`);
-  };
-},
-  });
+    if (perms?.includes("posts") || perms?.includes("all")) {
+      if (
+        (await context.reddit.getCommentById(context.commentId!)).authorName ==
+        (await appUser).username
+      ) {
+        spotlightComment.delete();
+        console.log(`Spotlight content deleted by ${currentUser?.username}.`);
+        return ui.showToast("Deleted!");
+      } else {
+        ui.showToast(
+          `This is only for content removal by ${(await appUser).username}!`,
+        );
+      }
+    } else {
+      ui.showToast(`You don't have the necessary permissions.`);
+    }
+  },
+});
 
 Devvit.addTrigger({
-  event: 'ModMail',
+  event: "ModMail",
   async onEvent(event, context) {
-  
-    const autoArchiving = await context.settings.get<boolean>(('autoArchive'));
+    const autoArchiving = await context.settings.get<boolean>("autoArchive");
 
-    if (!autoArchiving){
+    if (!autoArchiving) {
       console.log("Subreddit has disabled auto-archiving app messages.");
-    }
-    else {
-      console.log("Subreddit has enabled (default setting) auto-archiving app messages.");
-    try {
-    if (event.messageAuthor?.name.includes('spotlight-app')) {
-      console.log(`Archiving bot message conversation with ID: ${event.conversationId}`);
-      
-      await context.reddit.modMail.archiveConversation(event.conversationId);
-      
-      console.log(`Archived bot message conversation with ID: ${event.conversationId} successfully`);
     } else {
-      console.log('Skipped archiving: Author or subject conditions not met.');
+      console.log(
+        "Subreddit has enabled (default setting) auto-archiving app messages.",
+      );
+      try {
+        if (event.messageAuthor?.name.includes("spotlight-app")) {
+          console.log(
+            `Archiving bot message conversation with ID: ${event.conversationId}`,
+          );
+
+          await context.reddit.modMail.archiveConversation(
+            event.conversationId,
+          );
+
+          console.log(
+            `Archived bot message conversation with ID: ${event.conversationId} successfully`,
+          );
+        } else {
+          console.log(
+            "Skipped archiving: Author or subject conditions not met.",
+          );
+        }
+      } catch (error) {
+        console.error("Error archiving bot messages:", error);
+      }
     }
-  } catch (error) {
-    console.error('Error archiving bot messages:', error);
-  }
-}
-  }
-}
-);
+  },
+});
 
 export default Devvit;
