@@ -88,11 +88,6 @@ If needed, the app can also be restricted to moderators with full permissions. T
 
 Automatically archives messages sent by MultiPinger to keep Modmail organized.
 
-### Anonymous mode
-
-If enabled, messages are sent under the subreddit name.
-If disabled, the message identifies the moderator who initiated it.
-
 ### Permission requirements
 
 Teams may choose whether the app requires Mail permissions or full permissions.

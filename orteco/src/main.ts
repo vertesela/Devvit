@@ -1,4 +1,4 @@
-import { PostFlairUpdate, StickyRequest } from '@devvit/protos';
+import { ModMail, PostFlairUpdate, StickyRequest } from '@devvit/protos';
 import {
   Devvit,
   MenuItemOnPressEvent,
@@ -48,7 +48,7 @@ Devvit.configure({
  * Creates a KVStore key for the author
  */
 function getKeyForAuthor(author: User) {
-  return `${author.id}_strikes`; //dodan string
+  return `${author!.id}_strikes`; //dodan string
 }
 
 async function getThing(event: MenuItemOnPressEvent, context: Devvit.Context) { //promise
@@ -72,7 +72,7 @@ async function getAuthor(event: MenuItemOnPressEvent, context: Devvit.Context) {
  async function getAuthorStrikes(author: User, context: Devvit.Context) {
   const { kvStore } = context;
   const key = getKeyForAuthor(author);
-  console.log(`Dohvaćanje kaznenih bodova ${author.username}...`);
+  console.log(`Dohvaćanje kaznenih bodova ${author!.username}...`);
   return (await kvStore.get(key)) as number || 0;
 }
 
@@ -83,12 +83,12 @@ async function getAuthor(event: MenuItemOnPressEvent, context: Devvit.Context) {
 }
 
 
- async function checkStrikes(event: MenuItemOnPressEvent, context: Devvit.Context): Promise<void> {
+ async function checkStrikes(event: MenuItemOnPressEvent, context: Devvit.Context) {
   const author = await getAuthor(event, context);
   const { ui } = context;
-  const strikes = await getAuthorStrikes(author, context);
-  console.log(`Provjera kaznenih bodova kod ${author.username}...`);
-  ui.showToast(`u/${author.username} has ${strikes} negative point(s).`);
+  const strikes = await getAuthorStrikes(author!, context);
+  console.log(`Provjera kaznenih bodova kod ${author!.username}...`);
+  ui.showToast(`u/${author?.username} has ${strikes} negative point(s).`);
 } 
 
 async function removeStrike(event: MenuItemOnPressEvent, context: Devvit.Context): Promise<void> {
@@ -100,10 +100,10 @@ async function removeStrike(event: MenuItemOnPressEvent, context: Devvit.Context
   const subreddit = await reddit.getCurrentSubreddit();
   const thing = await getThing(event, context);
   const { permalink } = thing;
-  let strikes = await getAuthorStrikes(author, context);
+  let strikes = await getAuthorStrikes(author!, context);
   const bannedCheck = await context.reddit.getBannedUsers({
     subredditName: subreddit.name,
-    username: author.username,
+    username: author!.username,
   }).all();
 
   const comRuleLink = await context.settings.get<string>(('pravila'));
@@ -126,11 +126,11 @@ async function removeStrike(event: MenuItemOnPressEvent, context: Devvit.Context
   await thing!.unlock();
   
   if (strikes > 0) {
-    await setAuthorStrikes(author, --strikes, context);
-    ui.showToast(`Negative point removed for u/${author.username} (${strikes}).`);
+    await setAuthorStrikes(author!, --strikes, context);
+    ui.showToast(`Negative point removed for u/${author!.username} (${strikes}).`);
   
   
-      var PenRemove = `Hello ${author.username},\n\n`;
+      var PenRemove = `Hello ${author!.username},\n\n`;
   
       PenRemove += `We've recently flagged the following content which you posted on r/${subreddit.name} on ${createdAtGMTPlusOne} as a rule violation:\n\n\n`;
     
@@ -147,7 +147,7 @@ async function removeStrike(event: MenuItemOnPressEvent, context: Devvit.Context
       PenRemove += `~ r/${subreddit.name} Mod Team\n\n`;
   
   
-      var negRemove = `Hello ${author.username},\n\n`;
+      var negRemove = `Hello ${author!.username},\n\n`;
   
       negRemove += `We've recently flagged the following content which you posted on r/${subreddit.name} on ${createdAtGMTPlusOne} as a rule violation:\n\n\n`;
     
@@ -165,19 +165,19 @@ async function removeStrike(event: MenuItemOnPressEvent, context: Devvit.Context
   
   
       if (userIsBanned){ //unban, add mod mote and send msg
-        await context.reddit.unbanUser(author.username, subreddit.name)
+        await context.reddit.unbanUser(author!.username, subreddit.name)
         await context.reddit.addModNote(
           {
             subreddit: subreddit.name,
-            user: author.username,
-            note: `${currentUser.username} removed the negative point (${strikes}).`,
+            user: author!.username,
+            note: `${currentUser!.username} removed the negative point (${strikes}).`,
             label: 'SPAM_WARNING',
             redditId: event.targetId
           }
         );
         await context.reddit.sendPrivateMessageAsSubreddit({
           fromSubredditName: subreddit.name,
-          to: author.username,
+          to: author!.username,
           subject: `Important notification: your activity on r/${subreddit.name}`,
           text: negRemove,
           });
@@ -186,15 +186,15 @@ async function removeStrike(event: MenuItemOnPressEvent, context: Devvit.Context
         await context.reddit.addModNote(
           {
             subreddit: subreddit.name,
-            user: author.username,
-            note: `${currentUser.username} removed the negative point (${strikes}).`,
+            user: author!.username,
+            note: `${currentUser!.username} removed the negative point (${strikes}).`,
             label: 'SPAM_WARNING',
             redditId: event.targetId
           }
         );
       await context.reddit.sendPrivateMessageAsSubreddit({
         fromSubredditName: subreddit.name,
-        to: author.username,
+        to: author!.username,
         subject: `Important notification: your activity on r/${subreddit.name}`,
         text: PenRemove,
       });
@@ -205,7 +205,7 @@ async function removeStrike(event: MenuItemOnPressEvent, context: Devvit.Context
       };
   
 
-  console.log(`${currentUser.username} uklanja kazneni bod korisniku ${author.username}.`);
+  console.log(`${currentUser!.username} uklanja kazneni bod korisniku ${author!.username}.`);
   if (location === 'post'){
       await context.modLog
         .add({
@@ -237,25 +237,25 @@ async function clearStrikes(event: MenuItemOnPressEvent, context: Devvit.Context
   const currentUser = await reddit.getCurrentUser();
   const subreddit = await reddit.getCurrentSubreddit();
   const thing = await getThing(event, context);
-  let strikes = await getAuthorStrikes(author, context);
+  let strikes = await getAuthorStrikes(author!, context);
 
   if (strikes > 0) {
     await setAuthorStrikes(author!, 0, context);
-    ui.showToast(`Uklonjen broj negativnih bodova kod u/${author.username}: ${strikes}!`);
+    ui.showToast(`Uklonjen broj negativnih bodova kod u/${author!.username}: ${strikes}!`);
     return;
   }
 
   await context.reddit.addModNote(
     {
       subreddit: subreddit.name,
-      user: author.username,
-      note: `${currentUser.username} removed ${strikes} negative point(s).`,
+      user: author!.username,
+      note: `${currentUser!.username} removed ${strikes} negative point(s).`,
       label: 'SPAM_WARNING',
       redditId: event.targetId
     }
   );
 
-  ui.showToast(`u/${author.username} nema negativnih bodova!`);
+  ui.showToast(`u/${author!.username} nema negativnih bodova!`);
 }
 
 
@@ -285,17 +285,17 @@ async function remHarassment(event: MenuItemOnPressEvent, context: Devvit.Contex
 
 
   // Add a strike to the user and persist it to the KVStore
-  let strikes = await getAuthorStrikes(author, context);
+  let strikes = await getAuthorStrikes(author!, context);
   // const now = new Date().getTime();
 
 
   const bannedCheck = await context.reddit.getBannedUsers({
     subredditName: subreddit.name,
-    username: author.username,
+    username: author!.username,
   }).all();
   const userIsBanned = bannedCheck.length > 0;
 
-  //await context.redis.set(`participation-recentcheck-${author.username}`, now.toString(), {expiration: addHours(now, 1)}); //new
+  //await context.redis.set(`participation-recentcheck-${author!.username}`, now.toString(), {expiration: addHours(now, 1)}); //new
 
 
 
@@ -325,7 +325,7 @@ async function remHarassment(event: MenuItemOnPressEvent, context: Devvit.Contex
   const { permalink } = thing;
   const genRule = await context.settings.get<string>(('generalRule'));
 
-  var logHa = `Hello ${author.username},\n\n`;
+  var logHa = `Hello ${author!.username},\n\n`;
   
   logHa += `r/${subreddit.name} is a place for open discussion and engagement where all users are welcome to participate, but they must follow our [Community Rules](${comRuleLink}) which they accepted by registering on Reddit and joining r/${subreddit.name}.\n\n`
   
@@ -362,7 +362,7 @@ async function remHarassment(event: MenuItemOnPressEvent, context: Devvit.Contex
         logHa;
         punishment = `banned for 5 days`;
   }
-  const result = `${author.username} is ${punishment}).`;
+  const result = `${author!.username} is ${punishment}).`;
    ui.showToast(result);
 }
 else {
@@ -373,8 +373,8 @@ else {
     console.error("Undefined removal reason");
     return;
   }
-  const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
-  console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
+  const alert = `Content has been removed, but points are not added because ${author!.username} is already banned or already sanctioned for this. Please check in the mod log if ${author!.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
+  console.log(`${currentUser!.username} uklanja sadržaj, korisnik ${author!.username} je već baniran.`);
   return ui.showToast(alert);
 };
   /**
@@ -387,7 +387,7 @@ else {
   await reddit.sendPrivateMessageAsSubreddit(
     {
       fromSubredditName: subreddit.name,
-      to: author.username,
+      to: author!.username,
       subject: `Important notification: your activity on r/${subreddit.name}`,
       text: logHa,
 
@@ -399,7 +399,7 @@ else {
     await reddit.banUser(
       {
         subredditName: subreddit.name,
-        username: author.username,
+        username: author!.username,
         duration: days,
         context: thing!.id,
         message: `Ban in accordance with rule 4.2. due to ${strikes + 3} negative points. Please read the second message for more details.`,
@@ -414,8 +414,8 @@ else {
      context.reddit.addModNote(
       {
         subreddit: subreddit.name,
-        user: author.username,
-        note: `${currentUser.username} added 3 negative points for harassment (${strikes + 3}).`,
+        user: author!.username,
+        note: `${currentUser!.username} added 3 negative points for harassment (${strikes + 3}).`,
         label: 'SPAM_WARNING',
         redditId: event.targetId
       }
@@ -432,7 +432,7 @@ else {
       flairTemplateId: flairHarr,
     })
   }
-  console.log(`${currentUser.username} uklanja sadržaj korisnika ${author.username}.`);
+  console.log(`${currentUser!.username} uklanja sadržaj korisnika ${author!.username}.`);
     if (location === 'post'){
       await context.modLog
         .add({
@@ -492,16 +492,16 @@ async function remSpam(event: MenuItemOnPressEvent, context: Devvit.Context) {
   console.log(createdAtGMTPlusOne);
 
   // Add a strike to the user and persist it to the KVStore
-  let strikes = await getAuthorStrikes(author, context);
+  let strikes = await getAuthorStrikes(author!, context);
 
 
   const bannedCheck = await context.reddit.getBannedUsers({
     subredditName: subreddit.name,
-    username: author.username,
+    username: author!.username,
   }).all();
   const userIsBanned = bannedCheck.length > 0;
 
-  //await context.redis.set(`participation-recentcheck-${author.username}`, now.toString(), {expiration: addHours(now, 1)}); //new
+  //await context.redis.set(`participation-recentcheck-${author!.username}`, now.toString(), {expiration: addHours(now, 1)}); //new
 
 
 
@@ -520,7 +520,7 @@ async function remSpam(event: MenuItemOnPressEvent, context: Devvit.Context) {
   const { permalink } = thing;
   const genRule = await context.settings.get<string>(('generalRule'));
 
-  var logS = `Hello ${author.username},\n\n`;
+  var logS = `Hello ${author!.username},\n\n`;
   
   logS += `r/${subreddit.name} is a place for open discussion and engagement where all users are welcome to participate, but they must follow our [Community Rules](${comRuleLink}) which they accepted by registering on Reddit and joining r/${subreddit.name}.\n\n`
   
@@ -548,7 +548,7 @@ async function remSpam(event: MenuItemOnPressEvent, context: Devvit.Context) {
     await thing!.remove();
     await thing!.lock();
 
-    await setAuthorStrikes(author, strikes + 3, context);
+    await setAuthorStrikes(author!, strikes + 3, context);
   if (!RemRev) {
     console.error("Undefined removal reason");
     return;
@@ -645,7 +645,7 @@ async function remSpam(event: MenuItemOnPressEvent, context: Devvit.Context) {
         punishment = `banned for 15 days`;
         break;
   }
-  const result = `${author.username} is ${punishment} (${strikes + 3}).`;
+  const result = `${author!.username} is ${punishment} (${strikes + 3}).`;
    ui.showToast(result);
 }
 else {
@@ -656,8 +656,8 @@ else {
     console.error("Undefined removal reason");
     return;
   }
-  const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
-  console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
+  const alert = `Content has been removed, but points are not added because ${author!.username} is already banned or already sanctioned for this. Please check in the mod log if ${author!.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
+  console.log(`${currentUser!.username} uklanja sadržaj, korisnik ${author!.username} je već baniran.`);
   return ui.showToast(alert);
 };
   /**
@@ -670,7 +670,7 @@ else {
   await reddit.sendPrivateMessageAsSubreddit(
     {
       fromSubredditName: subreddit.name,
-      to: author.username,
+      to: author!.username,
       subject: `Important notification: your activity on r/${subreddit.name}`,
       text: logS,
 
@@ -682,7 +682,7 @@ else {
     await reddit.banUser(
       {
         subredditName: subreddit.name,
-        username: author.username,
+        username: author!.username,
         duration: days,
         context: thing!.id,
         reason: `Spam`,
@@ -697,14 +697,14 @@ else {
     await context.reddit.addModNote(
       {
         subreddit: subreddit.name,
-        user: author.username,
-        note: `${currentUser.username} added 3 negative points for spamming (${strikes + 3}).`,
+        user: author!.username,
+        note: `${currentUser!.username} added 3 negative points for spamming (${strikes + 3}).`,
         label: 'SPAM_WARNING',
         redditId: event.targetId
       }
     );
   }
-  console.log(`${currentUser.username} uklanja sadržaj korisnika ${author.username}.`);
+  console.log(`${currentUser!.username} uklanja sadržaj korisnika ${author!.username}.`);
     if (location === 'post'){
       await context.modLog
         .add({
@@ -753,17 +753,17 @@ async function remDoxxing(event: MenuItemOnPressEvent, context: Devvit.Context) 
 
 
   // Add a strike to the user and persist it to the KVStore
-  let strikes = await getAuthorStrikes(author, context);
+  let strikes = await getAuthorStrikes(author!, context);
   const now = new Date().getTime();
 
 
   const bannedCheck = await context.reddit.getBannedUsers({
     subredditName: subreddit.name,
-    username: author.username,
+    username: author!.username,
   }).all();
   const userIsBanned = bannedCheck.length > 0;
 
-  //await context.redis.set(`participation-recentcheck-${author.username}`, now.toString(), {expiration: addHours(now, 1)}); //new
+  //await context.redis.set(`participation-recentcheck-${author!.username}`, now.toString(), {expiration: addHours(now, 1)}); //new
 
   let createdAt: Date = thing.createdAt;
 
@@ -794,7 +794,7 @@ async function remDoxxing(event: MenuItemOnPressEvent, context: Devvit.Context) 
 
   const genRule = await context.settings.get<string>(('generalRule'));
 
-  var logDo = `Hello ${author.username},\n\n`;
+  var logDo = `Hello ${author!.username},\n\n`;
   
   logDo += `r/${subreddit.name} is a place for open discussion and engagement where all users are welcome to participate, but they must follow our [Community Rules](${comRuleLink}) which they accepted by registering on Reddit and joining r/${subreddit.name}.\n\n`
   
@@ -821,7 +821,7 @@ async function remDoxxing(event: MenuItemOnPressEvent, context: Devvit.Context) 
     await thing!.remove();
     await thing!.lock();
 
-    await setAuthorStrikes(author, strikes + 3, context);
+    await setAuthorStrikes(author!, strikes + 3, context);
   if (!RemRev) {
     console.error("Undefined removal reason");
     return;
@@ -918,7 +918,7 @@ async function remDoxxing(event: MenuItemOnPressEvent, context: Devvit.Context) 
         punishment = `banned for 15 days`;
         break;
   }
-  const result = `${author.username} is ${punishment} (${strikes + 3}).`;
+  const result = `${author!.username} is ${punishment} (${strikes + 3}).`;
    ui.showToast(result);
 }
 else {
@@ -929,8 +929,8 @@ else {
     console.error("Undefined removal reason");
     return;
   }
-  const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
-  console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
+  const alert = `Content has been removed, but points are not added because ${author!.username} is already banned or already sanctioned for this. Please check in the mod log if ${author!.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
+  console.log(`${currentUser!.username} uklanja sadržaj, korisnik ${author!.username} je već baniran.`);
   return ui.showToast(alert);
 };
   /**
@@ -943,7 +943,7 @@ else {
   await reddit.sendPrivateMessageAsSubreddit(
     {
       fromSubredditName: subreddit.name,
-      to: author.username,
+      to: author!.username,
       subject: `Important notification: your activity on r/${subreddit.name}`,
       text: logDo,
 
@@ -955,7 +955,7 @@ else {
     await reddit.banUser(
       {
         subredditName: subreddit.name,
-        username: author.username,
+        username: author!.username,
         duration: days,
         context: thing!.id,
         reason: `Doxxing`,
@@ -970,8 +970,8 @@ else {
     await context.reddit.addModNote(
       {
         subreddit: subreddit.name,
-        user: author.username,
-        note: `${currentUser.username} added 3 negative points for doxxing (${strikes + 3}).`,
+        user: author!.username,
+        note: `${currentUser!.username} added 3 negative points for doxxing (${strikes + 3}).`,
         label: 'SPAM_WARNING',
         redditId: event.targetId
       }
@@ -989,7 +989,7 @@ else {
     })
   }
 
-  console.log(`${currentUser.username} uklanja sadržaj korisnika ${author.username}.`);
+  console.log(`${currentUser!.username} uklanja sadržaj korisnika ${author!.username}.`);
     if (location === 'post'){
       await context.modLog
         .add({
@@ -1038,17 +1038,17 @@ async function remIllegal(event: MenuItemOnPressEvent, context: Devvit.Context) 
   const comRuleLink = await context.settings.get<string>(('pravila'));
 
   // Add a strike to the user and persist it to the KVStore
-  let strikes = await getAuthorStrikes(author, context);
+  let strikes = await getAuthorStrikes(author!, context);
   const now = new Date().getTime();
 
 
   const bannedCheck = await context.reddit.getBannedUsers({
     subredditName: subreddit.name,
-    username: author.username,
+    username: author!.username,
   }).all();
   const userIsBanned = bannedCheck.length > 0;
 
-  //await context.redis.set(`participation-recentcheck-${author.username}`, now.toString(), {expiration: addHours(now, 1)}); //new
+  //await context.redis.set(`participation-recentcheck-${author!.username}`, now.toString(), {expiration: addHours(now, 1)}); //new
 
   let createdAt: Date = thing.createdAt;
 
@@ -1077,7 +1077,7 @@ async function remIllegal(event: MenuItemOnPressEvent, context: Devvit.Context) 
 
   const genRule = await context.settings.get<string>(('generalRule'));
 
-  var logIll = `Hello ${author.username},\n\n`;
+  var logIll = `Hello ${author!.username},\n\n`;
   
   logIll += `r/${subreddit.name} is a place for open discussion and engagement where all users are welcome to participate, but they must follow our [Community Rules](${comRuleLink}) which they accepted by registering on Reddit and joining r/${subreddit.name}.\n\n`
   
@@ -1104,7 +1104,7 @@ async function remIllegal(event: MenuItemOnPressEvent, context: Devvit.Context) 
     await thing!.remove();
     await thing!.lock();
 
-    await setAuthorStrikes(author, strikes + 3, context);
+    await setAuthorStrikes(author!, strikes + 3, context);
   if (!RemRev) {
     console.error("Undefined removal reason");
     return;
@@ -1201,7 +1201,7 @@ async function remIllegal(event: MenuItemOnPressEvent, context: Devvit.Context) 
         punishment = `banned for 15 days`;
         break;
   }
-  const result = `${author.username} is ${punishment} (${strikes + 3}).`;
+  const result = `${author!.username} is ${punishment} (${strikes + 3}).`;
    ui.showToast(result);
 }
 else {
@@ -1212,8 +1212,8 @@ else {
     console.error("Undefined removal reason");
     return;
   }
-  const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
-  console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
+  const alert = `Content has been removed, but points are not added because ${author!.username} is already banned or already sanctioned for this. Please check in the mod log if ${author!.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
+  console.log(`${currentUser!.username} uklanja sadržaj, korisnik ${author!.username} je već baniran.`);
   return ui.showToast(alert);
 };
   /**
@@ -1226,7 +1226,7 @@ else {
   await reddit.sendPrivateMessageAsSubreddit(
     {
       fromSubredditName: subreddit.name,
-      to: author.username,
+      to: author!.username,
       subject: `Important notification: your activity on r/${subreddit.name}`,
       text: logIll,
 
@@ -1238,7 +1238,7 @@ else {
     await reddit.banUser(
       {
         subredditName: subreddit.name,
-        username: author.username,
+        username: author!.username,
         duration: days,
         message: `Ban in accordance with rule 4.2. due to ${strikes + 3} negative points. Please read the second message for more details.`,
         context: thing!.id,
@@ -1253,8 +1253,8 @@ else {
     await context.reddit.addModNote(
       {
         subreddit: subreddit.name,
-        user: author.username,
-        note: `${currentUser.username} added 3 negative points for illegal content (${strikes + 3}).`,
+        user: author!.username,
+        note: `${currentUser!.username} added 3 negative points for illegal content (${strikes + 3}).`,
         label: 'SPAM_WARNING',
         redditId: event.targetId
       }
@@ -1271,7 +1271,7 @@ else {
       flairTemplateId: flairIllegal,
     })
   }
-  console.log(`${currentUser.username} uklanja sadržaj korisnika ${author.username}.`);
+  console.log(`${currentUser!.username} uklanja sadržaj korisnika ${author!.username}.`);
     if (location === 'post'){
       await context.modLog
         .add({
@@ -1321,17 +1321,17 @@ async function remEtiquette(event: MenuItemOnPressEvent, context: Devvit.Context
 
 
   // Add a strike to the user and persist it to the KVStore
-  let strikes = await getAuthorStrikes(author, context);
+  let strikes = await getAuthorStrikes(author!, context);
   const now = new Date().getTime();
 
 
   const bannedCheck = await context.reddit.getBannedUsers({
     subredditName: subreddit.name,
-    username: author.username,
+    username: author!.username,
   }).all();
   const userIsBanned = bannedCheck.length > 0;
 
-  //await context.redis.set(`participation-recentcheck-${author.username}`, now.toString(), {expiration: addHours(now, 1)}); //new
+  //await context.redis.set(`participation-recentcheck-${author!.username}`, now.toString(), {expiration: addHours(now, 1)}); //new
 
   const contentB = `${thing!.body?.split("\n\n").join("\n\n> ")}`;
 
@@ -1348,6 +1348,16 @@ async function remEtiquette(event: MenuItemOnPressEvent, context: Devvit.Context
 
   console.log(createdAtGMTPlusOne);
 
+   const accountAgeDays = Math.floor(
+      (Date.now() - author!.createdAt.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+const commentKarma = author!.commentKarma;
+
+    // 3) var/const for your condition
+    const tooNewOrLowKarma = accountAgeDays < 30 || commentKarma < 500;
+
+
   // Used to tell the moderator what punishment the user received
   // let addModNote = true; //+
   let punishment = '';
@@ -1355,6 +1365,8 @@ async function remEtiquette(event: MenuItemOnPressEvent, context: Devvit.Context
   let ban = true;
   // We'll determine how long the ban lasts based on how many strikes they have
   let days = 0;
+
+  let shouldNotify = true;
 
 
   // Get the current subreddit from the metadata
@@ -1364,7 +1376,7 @@ async function remEtiquette(event: MenuItemOnPressEvent, context: Devvit.Context
   const ruleEtiq2 = await context.settings.get<string>(('textetiq2'));
   const genRule = await context.settings.get<string>(('generalRule'));
 
-  var logEtt = `Hello ${author.username},\n\n`;
+  var logEtt = `Hello ${author!.username},\n\n`;
   
   logEtt += `r/${subreddit.name} is a place for open discussion and engagement where all users are welcome to participate, but they must follow our [Community Rules](${comRuleLink}) which they accepted by registering on Reddit and joining r/${subreddit.name}.\n\n`
   
@@ -1391,12 +1403,26 @@ async function remEtiquette(event: MenuItemOnPressEvent, context: Devvit.Context
   logEtt += `~ r/${subreddit.name} Mod Team\n\n`;
 
 
+  var logEvidence = `u/${currentUser?.username} has removed the content posted by u/${author?.username}:\n\n`;
+    
+  logEvidence += `> ${contentB}\n\n`;
+  
+  logEvidence += `Link to removed content: https://reddit.com${permalink}\n\n\n`;
+
+  logEvidence += `**Reason**:\n\n`;
+  
+  logEvidence += `> ${ruleEtiq}\n\n`;
+
+  logEvidence += `**Current number of u/${author?.username}'s negative points**: ${strikes + 1}.\n\n`
+
+
+
   if (!userIsBanned && !thing.isRemoved())
   {
     await thing!.remove();
     await thing!.lock();
 
-    await setAuthorStrikes(author, ++strikes, context);
+    await setAuthorStrikes(author!, ++strikes, context);
   if (!RemRev) {
     console.error("Undefined removal reason");
     return;
@@ -1407,30 +1433,43 @@ async function remEtiquette(event: MenuItemOnPressEvent, context: Devvit.Context
         logEtt;
         punishment = `warned`;
         ban = false;
+        shouldNotify = false;
         break;    
   
      case 2:
         logEtt;
         punishment = `warned`;
         ban = false;
+        shouldNotify = false;
         break;
         
       case 3:
-        logEtt;
         punishment = `warned`;
-        ban = false;
+        if (!tooNewOrLowKarma) {
+          ban = false; 
+          logEtt += `You may be banned.\n\n`;
+          logEvidence += `According to our rules, ${author?.username} should be banned for 3 days. Please check the previous removals.\n\n`;
+        } else {
+          days = 3;
+          logEtt += `New account, instant ban\n\n`;
+        }
+
+        shouldNotify = true;
         break;
         
       case 4:
         logEtt;
         punishment = `warned`;
         ban = false;
+        logEvidence += `According to our rules, ${author?.username} should be banned for 3 days. Please check the previous removals.\n\n`;
+        shouldNotify = true;
         break;
   
       case 5:
-        days = 5;
         logEtt;
         punishment = `banned for 5 days`;
+        logEvidence += `According to our rules, ${author?.username} should be banned for 5 days. Please check the previous removals.\n\n`;
+        shouldNotify = true;
         break;
   
       case 6:
@@ -1493,7 +1532,7 @@ async function remEtiquette(event: MenuItemOnPressEvent, context: Devvit.Context
         punishment = `banned for 15 days`;
         break;
   }
-  const result = `${author.username} is ${punishment} (${strikes}).`;
+  const result = `${author!.username} is ${punishment} (${strikes}).`;
    ui.showToast(result);
 }
 else {
@@ -1504,8 +1543,8 @@ else {
     console.error("Undefined removal reason");
     return;
   }
-  const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
-  console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
+  const alert = `Content has been removed, but points are not added because ${author!.username} is already banned or already sanctioned for this. Please check in the mod log if ${author!.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
+  console.log(`${currentUser!.username} uklanja sadržaj, korisnik ${author!.username} je već baniran.`);
   return ui.showToast(alert);
 };
 
@@ -1516,27 +1555,43 @@ else {
    * NOTE: Apps are executed as the moderator that installed this app into a
    *       subreddit and will be used as the user that sends this message!
    */
-  await reddit.sendPrivateMessageAsSubreddit(
+
+
+  const messageToUser = await reddit.modMail.createConversation(
     {
-      fromSubredditName: subreddit.name,
-      to: author.username,
+      subredditName: subreddit.name,
+      to: author!.username,
+      isAuthorHidden: true,
       subject: `Important notification: your activity on r/${subreddit.name}`,
-      text: logEtt,
+      body: logEtt,
 
     },
     );
+
+
+    if (!shouldNotify) {
+    console.log("No need for notifying...");
+    await context.reddit.modMail.archiveConversation(messageToUser.conversation.id!);
+  } else {
+    await reddit.modMail.reply({
+      conversationId: messageToUser.conversation.id!,
+      body: `Heads up - u/${author?.username} has ${strikes} negative points.`,
+      isInternal: true
+    })
+    
+  };
     
   if (ban) {
     const currentUser = await reddit.getCurrentUser();
     await reddit.banUser(
       {
         subredditName: subreddit.name,
-        username: author.username,
+        username: author!.username,
         duration: days,
         context: thing!.id,
         reason: `Insulting`,
-        message: `Ban in accordance with rule 4.2. due to ${strikes} negative points. Please read the second message for more details.`,
-        note: `Ban in accordance with rule 4.2. due to ${strikes} negative points.`,
+        message: logEtt,
+        note: `Ban due to ${strikes} negative points.`,
       }
     );
   }
@@ -1546,8 +1601,8 @@ else {
     await context.reddit.addModNote(
       {
         subreddit: subreddit.name,
-        user: author.username,
-        note: `${currentUser.username} added a negative point for insulting (${strikes}).`,
+        user: author!.username,
+        note: `${currentUser!.username} added a negative point for insulting (${strikes}).`,
         label: 'SPAM_WARNING',
         redditId: event.targetId
       }
@@ -1562,7 +1617,7 @@ else {
       flairTemplateId: flairEtt,
     })
   }
-  console.log(`${currentUser.username} uklanja sadržaj korisnika ${author.username}.`);
+  console.log(`${currentUser!.username} uklanja sadržaj korisnika ${author!.username}.`);
     if (location === 'post'){
       await context.modLog
         .add({
@@ -1619,9 +1674,9 @@ else {
       
           const user = await context.reddit.getUserById(userId);
           const post = await context.reddit.getPostById(postId);
-          let strikes = await getAuthorStrikes(author, context);
+          let strikes = await getAuthorStrikes(author!, context);
       
-        await setAuthorStrikes(author, --strikes, context);
+        await setAuthorStrikes(author!, --strikes, context);
       
           /**
            * Send a private message to the user:
@@ -1637,7 +1692,7 @@ else {
         await context.scheduler.runJob({
           name: REMIND_ME_ACTION_NAME,
           data: {
-            userId: currentUser.id,
+            userId: currentUser!.id,
             postId: context.postId,
             fromWhen: now,
           },
@@ -1646,9 +1701,9 @@ else {
         });
       
         const author = await getAuthor(event, context);
-        let strikes = await getAuthorStrikes(author, context);
+        let strikes = await getAuthorStrikes(author!, context);
       
-        await setAuthorStrikes(author, --strikes, context);
+        await setAuthorStrikes(author!, --strikes, context);
       } 
       */
     };
@@ -1681,12 +1736,12 @@ async function remKmecanje(event: MenuItemOnPressEvent, context: Devvit.Context)
   const contentB = `${thing!.body?.split("\n\n").join("\n\n> ")}`;
 
   // Add a strike to the user and persist it to the KVStore
-  let strikes = await getAuthorStrikes(author, context);
+  let strikes = await getAuthorStrikes(author!, context);
 
 
   const bannedCheck = await context.reddit.getBannedUsers({
     subredditName: subreddit.name,
-    username: author.username,
+    username: author!.username,
   }).all();
   const userIsBanned = bannedCheck.length > 0;
 
@@ -1719,7 +1774,7 @@ async function remKmecanje(event: MenuItemOnPressEvent, context: Devvit.Context)
 
   console.log(createdAtGMTPlusOne);
 
-  var logKM = `Hello ${author.username},\n\n`;
+  var logKM = `Hello ${author!.username},\n\n`;
 
   logKM += `r/${subreddit.name} is a place for open discussion and engagement where all users are welcome to participate, but they must follow our [Community Rules](${comRuleLink}) which they accepted by registering on Reddit and joining r/${subreddit.name}.\n\n`
   
@@ -1748,7 +1803,7 @@ async function remKmecanje(event: MenuItemOnPressEvent, context: Devvit.Context)
     await thing!.remove();
     await thing!.lock();
 
-    await setAuthorStrikes(author, ++strikes, context);
+    await setAuthorStrikes(author!, ++strikes, context);
   if (!RemRev) {
     console.error("Undefined removal reason");
     return;
@@ -1845,7 +1900,7 @@ async function remKmecanje(event: MenuItemOnPressEvent, context: Devvit.Context)
         punishment = `banned for 15 days`;
         break;
   }
-  const result = `${author.username} is ${punishment} (${strikes}).`;
+  const result = `${author!.username} is ${punishment} (${strikes}).`;
    ui.showToast(result);
 }
 else {
@@ -1856,8 +1911,8 @@ else {
     console.error("Undefined removal reason");
     return;
   }
-  const alert = `Content has been removed, but points are not added because ${author.username} is already banned or already sanctioned for this. Please check in the mod log if ${author.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
-  console.log(`${currentUser.username} uklanja sadržaj, korisnik ${author.username} je već baniran.`);
+  const alert = `Content has been removed, but points are not added because ${author!.username} is already banned or already sanctioned for this. Please check in the mod log if ${author!.username} has already been sanctioned for this and if the user has already been banned - if not - approve this content, then repeat the sanctioning.`;
+  console.log(`${currentUser!.username} uklanja sadržaj, korisnik ${author!.username} je već baniran.`);
   return ui.showToast(alert);
 };
   /**
@@ -1870,7 +1925,7 @@ else {
   await reddit.sendPrivateMessageAsSubreddit(
     {
       fromSubredditName: subreddit.name,
-      to: author.username,
+      to: author!.username,
       subject: `Important notification: your activity on r/${subreddit.name}`,
       text: logKM
 
@@ -1882,7 +1937,7 @@ else {
     await reddit.banUser(
       {
         subredditName: subreddit.name,
-        username: author.username,
+        username: author!.username,
         duration: days,
         context: thing!.id,
         reason: `Kmečanje`,
@@ -1897,8 +1952,8 @@ else {
     await context.reddit.addModNote(
       {
         subreddit: subreddit.name,
-        user: author.username,
-        note: `${currentUser.username} added a negative point for the mod discussion (${strikes}).`,
+        user: author!.username,
+        note: `${currentUser!.username} added a negative point for the mod discussion (${strikes}).`,
         label: 'SPAM_WARNING',
         redditId: event.targetId
       }
@@ -1915,7 +1970,7 @@ else {
       flairTemplateId: flairKmecanje,
     })
   }
-  console.log(`${currentUser.username} uklanja sadržaj korisnika ${author.username}.`);
+  console.log(`${currentUser!.username} uklanja sadržaj korisnika ${author!.username}.`);
     if (location === 'post'){
       await context.modLog
         .add({
@@ -1950,8 +2005,8 @@ async function silentPointAdd(event: MenuItemOnPressEvent, context: Devvit.Conte
     const subreddit = await reddit.getCurrentSubreddit();
     const currentUser = await reddit.getCurrentUser();
 // Add a strike to the user and persist it to the KVStore
-    let strikes = await getAuthorStrikes(author, context);
-    await setAuthorStrikes(author, ++strikes, context);
+    let strikes = await getAuthorStrikes(author!, context);
+    await setAuthorStrikes(author!, ++strikes, context);
 
     
     // Get the current subreddit from the metadata
@@ -1962,8 +2017,8 @@ async function silentPointAdd(event: MenuItemOnPressEvent, context: Devvit.Conte
       await reddit.addModNote(
         {
           subreddit: subreddit.name,
-          user: author.username,
-          note: `Strike added by ${currentUser.username}`,
+          user: author!.username,
+          note: `Strike added by ${currentUser!.username}`,
           label: 'SPAM_WARNING',
           redditId: ''
         }
@@ -1974,8 +2029,8 @@ async function silentPointAdd(event: MenuItemOnPressEvent, context: Devvit.Conte
     await context.reddit.addModNote(
       {
         subreddit: subreddit.name,
-        user: author.username,
-        note: `${currentUser.username} has silently added a negative point (${strikes}).`,
+        user: author!.username,
+        note: `${currentUser!.username} has silently added a negative point (${strikes}).`,
         label: 'SPAM_WATCH',
         redditId: event.targetId
       }
@@ -1990,24 +2045,24 @@ async function silentPointRemove(event: MenuItemOnPressEvent, context: Devvit.Co
   const subreddit = await reddit.getCurrentSubreddit();
   const thing = await getThing(event, context);
   const { permalink } = thing;
-  let strikes = await getAuthorStrikes(author, context);
+  let strikes = await getAuthorStrikes(author!, context);
   const bannedCheck = await context.reddit.getBannedUsers({
     subredditName: subreddit.name,
-    username: author.username,
+    username: author!.username,
   }).all();
   const userIsBanned = bannedCheck.length > 0;
     
   if (strikes > 0) {
-    await setAuthorStrikes(author, --strikes, context);
-    ui.showToast(`Silently removed a negative point from u/${author.username} (${strikes}).`);
+    await setAuthorStrikes(author!, --strikes, context);
+    ui.showToast(`Silently removed a negative point from u/${author!.username} (${strikes}).`);
   
     if (userIsBanned){ //unban, add mod mote and send msg
-      //await context.reddit.unbanUser(author.username, subreddit.name)
+      //await context.reddit.unbanUser(author!.username, subreddit.name)
       await context.reddit.addModNote(
         {
           subreddit: subreddit.name,
-          user: author.username,
-          note: `${currentUser.username} has silently removed a negative point (${strikes}).`,
+          user: author!.username,
+          note: `${currentUser!.username} has silently removed a negative point (${strikes}).`,
           label: 'SPAM_WARNING',
           redditId: event.targetId
         }
@@ -2017,8 +2072,8 @@ async function silentPointRemove(event: MenuItemOnPressEvent, context: Devvit.Co
       await context.reddit.addModNote(
         {
           subreddit: subreddit.name,
-          user: author.username,
-          note: `${currentUser.username} has silently removed a negative point (${strikes}).`,
+          user: author!.username,
+          note: `${currentUser!.username} has silently removed a negative point (${strikes}).`,
           label: 'SPAM_WARNING',
           redditId: event.targetId
         }
@@ -2065,7 +2120,7 @@ Devvit.addTrigger({
 
         await context.reddit.modMail.createConversation({
           subredditName: subreddit.name,
-          to: postAuthor,
+          to: postauthor!,
           isAuthorHidden: true,
           subject: `Your post on r/${subreddit.name} has been approved by moderators!`,
           body: textMsg
@@ -2296,10 +2351,12 @@ Devvit.addMenuItem({
   });
 
 
- Devvit.addTrigger({
+/*  Devvit.addTrigger({
   event: 'ModMail',
   async onEvent(event, context) {
   
+    const subreddit = event.conversationSubreddit;
+
     console.log(`Received modmail trigger event:\n${JSON.stringify(event)}`);
 
     try {
@@ -2318,7 +2375,7 @@ Devvit.addMenuItem({
 }
 }
 );
-
+ */
 
 const repostF = Devvit.createForm(
     {
@@ -2355,7 +2412,7 @@ const repostF = Devvit.createForm(
 
     await context.reddit.addModNote({
       subreddit: subreddit.name,
-      user: postAuthor,
+      user: postauthor!,
       label: 'SPAM_WARNING',
       redditId: originalPost,
       note: `${modName.username} has removed repost (without URL to the original post).`
@@ -2386,7 +2443,7 @@ const repostF = Devvit.createForm(
 
     await context.reddit.addModNote({
       subreddit: subreddit.name,
-      user: postAuthor,
+      user: postauthor!,
       label: 'SPAM_WARNING',
       redditId: originalPost,
       note: `${modName.username} has removed repost (with URL to the original post).`

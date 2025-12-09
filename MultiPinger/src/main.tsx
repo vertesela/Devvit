@@ -609,8 +609,9 @@ const mstForm = Devvit.createForm(
         name: `displayModName`,
         label: "Send anonymously?",
         helpText:
-          "If enabled, messages will be sent under the subreddit name. Disable to show your moderator username.",
+          "If enabled, messages will be sent under the subreddit name. Disable to show your moderator username - currently impossible.",
         type: "boolean",
+        disabled: true,
         defaultValue: true,
       },
     ],
